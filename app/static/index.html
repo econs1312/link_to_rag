@@ -679,6 +679,19 @@
                 <div class="meta-value" id="resDocId" style="font-family: var(--font-code); font-size: 0.8rem;">-</div>
               </div>
             </div>
+
+            <!-- Extracted Markdown Content Viewer -->
+            <div style="margin-top: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">
+                  <i class="fa-solid fa-file-lines" style="color: var(--accent-primary);"></i> Conteúdo Extraído (Markdown)
+                </span>
+                <button type="button" class="preset-btn" onclick="copyExtractedContent()">
+                  <i class="fa-solid fa-copy"></i> Copiar Texto
+                </button>
+              </div>
+              <div id="resCleanedText" class="chunk-text-box" style="max-height: 220px; overflow-y: auto; font-size: 0.85rem;">-</div>
+            </div>
           </div>
 
           <div id="jobErrorBox" style="display: none;" class="result-box" style="border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);">
@@ -861,6 +874,7 @@
             document.getElementById('resTitle').innerText = data.title || 'Untitled';
             document.getElementById('resAuthor').innerText = data.author || 'Desconhecido';
             document.getElementById('resDocId').innerText = data.document_id || data.job_id;
+            document.getElementById('resCleanedText').innerText = data.cleaned_markdown || 'Nenhum conteúdo textual extraído.';
           } else if (status === 'failed') {
             clearInterval(jobPollInterval);
             document.getElementById('jobErrorBox').style.display = 'block';
@@ -870,6 +884,12 @@
           console.error(err);
         }
       }, 1500);
+    }
+
+    function copyExtractedContent() {
+      const text = document.getElementById('resCleanedText').innerText;
+      navigator.clipboard.writeText(text);
+      alert('Conteúdo copiado para a área de transferência!');
     }
 
     function updateStepState(status) {

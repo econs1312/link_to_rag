@@ -35,6 +35,7 @@ async def get_job_status(
         title=doc.title,
         author=doc.author,
         document_id=doc.id if doc.status.value == "completed" else None,
+        cleaned_markdown=doc.cleaned_markdown or doc.raw_text,
         error_message=doc.error_message,
         created_at=doc.created_at,
         updated_at=doc.updated_at,
