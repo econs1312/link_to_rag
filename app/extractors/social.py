@@ -46,17 +46,23 @@ class SocialMediaExtractor(BaseExtractor):
         author = data.get("uploader") or data.get("channel") or "Social Media Account"
         description = data.get("description") or data.get("fulltitle") or title
 
+        # Extract spoken audio transcription (Whisper AI)
+        from app.services.audio_transcriber import audio_transcriber
+        audio_transcript = await audio_transcriber.transcribe_video_audio(url)
+        full_content = f"{description}{audio_transcript}"
+
         self.record_success(url)
         return ExtractedContent(
-            raw_text=description,
+            raw_text=full_content,
             title=title,
             author=author,
             metadata={
                 "platform": "social_media",
-                "extractor": "yt-dlp",
+                "extractor": "yt-dlp_whisper",
                 "uploader_id": data.get("uploader_id"),
                 "like_count": data.get("like_count"),
                 "view_count": data.get("view_count"),
+                "has_audio_transcript": bool(audio_transcript),
             },
             source_url=url,
         )
