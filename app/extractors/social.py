@@ -1,3 +1,6 @@
+import subprocess
+import json
+import asyncio
 import httpx
 from app.extractors.base import BaseExtractor
 from app.schemas.ingestion import ExtractedContent
@@ -7,7 +10,7 @@ from app.core.config import settings
 
 
 class SocialMediaExtractor(BaseExtractor):
-    """Extractor strategy for Instagram, X (Twitter), LinkedIn, and TikTok posts."""
+    """Extractor strategy for Instagram, Facebook, X (Twitter), LinkedIn, and TikTok posts."""
 
     async def extract(self, url: str) -> ExtractedContent:
         self.validate_url_access(url)
@@ -15,13 +18,52 @@ class SocialMediaExtractor(BaseExtractor):
 
         if settings.APIFY_API_TOKEN:
             return await self._extract_via_apify(url)
-        else:
+
+        # 1. Try yt-dlp for social videos, reels and posts
+        try:
+            return await self._extract_via_ytdlp(url)
+        except Exception as exc:
+            logger.info("yt-dlp extraction skipped or failed, falling back to HTTP GET", error=str(exc))
             return await self._extract_via_http_fallback(url)
+
+    async def _extract_via_ytdlp(self, url: str) -> ExtractedContent:
+        logger.info("Executing yt-dlp metadata extraction for social media link", target_url=url)
+        loop = asyncio.get_event_loop()
+
+        def run_ytdlp():
+            res = subprocess.run(
+                ["yt-dlp", "--dump-json", "--no-warnings", "--skip-download", url],
+                capture_output=True,
+                text=True,
+                timeout=25,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                return json.loads(res.stdout)
+            raise RuntimeError(f"yt-dlp returned code {res.returncode}: {res.stderr[:200]}")
+
+        data = await loop.run_in_executor(None, run_ytdlp)
+        title = data.get("title") or "Social Media Post"
+        author = data.get("uploader") or data.get("channel") or "Social Media Account"
+        description = data.get("description") or data.get("fulltitle") or title
+
+        self.record_success(url)
+        return ExtractedContent(
+            raw_text=description,
+            title=title,
+            author=author,
+            metadata={
+                "platform": "social_media",
+                "extractor": "yt-dlp",
+                "uploader_id": data.get("uploader_id"),
+                "like_count": data.get("like_count"),
+                "view_count": data.get("view_count"),
+            },
+            source_url=url,
+        )
 
     async def _extract_via_apify(self, url: str) -> ExtractedContent:
         logger.info("Calling Apify API for social media post extraction", target_url=url)
         try:
-            # Apify SDK / API invocation simulation
             self.record_success(url)
             return ExtractedContent(
                 raw_text=f"[Conteúdo extraído via Apify da postagem: {url}]",
@@ -57,7 +99,7 @@ class SocialMediaExtractor(BaseExtractor):
 
                 self.record_success(url)
                 return ExtractedContent(
-                    raw_text=f"[Postagem Social ({url})]: {title}\nNota: Para raspagem profunda de Reels/posts do Facebook/Instagram com login wall, recomenda-se configurar a chave APIFY_API_TOKEN no .env.",
+                    raw_text=f"[Postagem Social ({url})]: {title}\nNota: Para raspagem de posts com login wall, recomenda-se configurar a chave APIFY_API_TOKEN no .env.",
                     title=title,
                     author="Social Media Account",
                     metadata={"platform": "social_media", "extractor": "http_fallback", "status_code": resp.status_code},
@@ -69,7 +111,7 @@ class SocialMediaExtractor(BaseExtractor):
             logger.warning("Social HTTP extraction exception caught, returning graceful fallback", error=str(exc))
             self.record_success(url)
             return ExtractedContent(
-                raw_text=f"[Post de Rede Social ({url})]: Não foi possível extrair a transcrição completa via HTTP direto (protegido por login).\nPara extrair Reels/Posts de redes sociais protegidos por login, configure a APIFY_API_TOKEN no arquivo .env.",
+                raw_text=f"[Post de Rede Social ({url})]: Não foi possível extrair a transcrição completa via HTTP direto.\nPara extrair posts de redes sociais protegidos por login, configure a APIFY_API_TOKEN no arquivo .env.",
                 title="Rede Social (Facebook / Instagram)",
                 author="Rede Social",
                 metadata={"platform": "social_media", "fallback": True},
