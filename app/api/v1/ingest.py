@@ -1,5 +1,7 @@
 import uuid
-from fastapi import APIRouter, Depends, status, BackgroundTasks
+from typing import Optional
+from fastapi import APIRouter, Depends, status, BackgroundTasks, Request
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from arq.connections import create_pool, RedisSettings
 from urllib.parse import urlparse
@@ -8,6 +10,7 @@ from app.models.document import Document, IngestionStatus
 from app.schemas.ingestion import IngestRequest, IngestResponse
 from app.core.config import settings
 from app.core.logging import logger
+from app.core.security import verify_api_key, extract_tenant_id
 from app.services.ingestion_pipeline import IngestionPipelineService
 
 router = APIRouter()
@@ -33,13 +36,20 @@ async def get_redis_pool():
 )
 async def enqueue_ingestion(
     payload: IngestRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    api_key: Optional[str] = Depends(verify_api_key),
 ):
     correlation_id = str(uuid.uuid4())
     url_str = str(payload.url)
+    tenant_id = extract_tenant_id(request)
 
-    log = logger.bind(correlation_id=correlation_id, target_url=url_str)
+    metadata = dict(payload.metadata or {})
+    if tenant_id:
+        metadata["tenant_id"] = tenant_id
+
+    log = logger.bind(correlation_id=correlation_id, target_url=url_str, tenant_id=tenant_id)
     log.info("Received ingestion request", source_type=payload.source_type)
 
     # 1. Create initial Document record in DB
@@ -49,9 +59,10 @@ async def enqueue_ingestion(
         correlation_id=correlation_id,
         source_url=url_str,
         source_type=payload.source_type,
-        metadata_info=payload.metadata or {},
+        metadata_info=metadata,
         status=IngestionStatus.PENDING,
     )
+
     db.add(document)
     await db.commit()
     await db.refresh(document)

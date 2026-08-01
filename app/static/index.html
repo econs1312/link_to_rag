@@ -609,6 +609,9 @@
       <button class="tab-btn" onclick="switchTab('historyTab')">
         <i class="fa-solid fa-list-check"></i> Histórico de Jobs
       </button>
+      <button class="tab-btn" onclick="switchTab('analyticsTab'); loadAnalytics();">
+        <i class="fa-solid fa-chart-pie"></i> Analytics
+      </button>
     </div>
 
     <!-- TAB 1: INGESTION -->
@@ -978,6 +981,81 @@
               <i class="fa-solid fa-triangle-exclamation"></i> Falha no Processamento
             </h4>
             <p id="uploadResErrorMsg" style="font-size: 0.85rem; color: #FCA5A5; font-family: var(--font-code);"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: ANALYTICS -->
+    <div id="analyticsTab" class="tab-pane">
+      <div class="glass-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <div>
+            <h2 class="card-title" style="margin-bottom: 0.2rem;">
+              <i class="fa-solid fa-chart-pie" style="color: var(--accent-primary);"></i>
+              Analytics &amp; Métricas do Sistema
+            </h2>
+            <p class="card-subtitle" style="margin-bottom: 0;">Métricas em tempo real sobre ingestões, chunks vetoriais e distribuição de fontes no PostgreSQL.</p>
+          </div>
+          <button type="button" class="preset-btn" onclick="loadAnalytics()" style="padding: 0.5rem 0.85rem;">
+            <i class="fa-solid fa-rotate-right"></i> Atualizar
+          </button>
+        </div>
+
+        <!-- Key Metrics Cards Grid -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+          <div style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.25); border-radius: 12px; padding: 1.1rem; text-align: center;">
+            <div style="font-size: 0.75rem; font-weight: 600; color: #A5B4FC; text-transform: uppercase; margin-bottom: 0.3rem;">Total de Documentos</div>
+            <div id="statTotalDocs" style="font-size: 2rem; font-weight: 800; color: var(--text-main); font-family: var(--font-heading);">0</div>
+          </div>
+          <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 12px; padding: 1.1rem; text-align: center;">
+            <div style="font-size: 0.75rem; font-weight: 600; color: #6EE7B7; text-transform: uppercase; margin-bottom: 0.3rem;">Concluídos</div>
+            <div id="statCompleted" style="font-size: 2rem; font-weight: 800; color: #34D399; font-family: var(--font-heading);">0</div>
+          </div>
+          <div style="background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25); border-radius: 12px; padding: 1.1rem; text-align: center;">
+            <div style="font-size: 0.75rem; font-weight: 600; color: #93C5FD; text-transform: uppercase; margin-bottom: 0.3rem;">Chunks no Vector DB</div>
+            <div id="statTotalChunks" style="font-size: 2rem; font-weight: 800; color: #60A5FA; font-family: var(--font-heading);">0</div>
+          </div>
+          <div style="background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25); border-radius: 12px; padding: 1.1rem; text-align: center;">
+            <div style="font-size: 0.75rem; font-weight: 600; color: #FCA5A5; text-transform: uppercase; margin-bottom: 0.3rem;">Falhas</div>
+            <div id="statFailed" style="font-size: 2rem; font-weight: 800; color: #F87171; font-family: var(--font-heading);">0</div>
+          </div>
+        </div>
+
+        <!-- Breakdown Section Grid -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+          <!-- Status Distribution -->
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1.1rem;">
+            <h3 style="font-size: 0.9rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.4rem;">
+              <i class="fa-solid fa-bars-progress" style="color: var(--accent-primary);"></i> Distribuição por Status
+            </h3>
+            <div id="analyticsStatusBox">Carregando estatísticas...</div>
+          </div>
+
+          <!-- Source Type Distribution -->
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1.1rem;">
+            <h3 style="font-size: 0.9rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.4rem;">
+              <i class="fa-solid fa-layer-group" style="color: var(--accent-emerald);"></i> Tipos de Origem / Fontes
+            </h3>
+            <div id="analyticsSourcesBox">Carregando estatísticas...</div>
+          </div>
+        </div>
+
+        <!-- Recent Log Sections -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+          <!-- Recent Completed -->
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1.1rem;">
+            <h3 style="font-size: 0.9rem; font-weight: 700; color: #34D399; margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.4rem;">
+              <i class="fa-solid fa-circle-check"></i> Últimos Ingeridos
+            </h3>
+            <div id="analyticsRecentCompleted">Sem registros</div>
+          </div>
+          <!-- Recent Failures -->
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1.1rem;">
+            <h3 style="font-size: 0.9rem; font-weight: 700; color: #F87171; margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.4rem;">
+              <i class="fa-solid fa-triangle-exclamation"></i> Últimas Falhas
+            </h3>
+            <div id="analyticsRecentFailed">Nenhuma falha recente</div>
           </div>
         </div>
       </div>
@@ -1442,7 +1520,88 @@
       a.download = '';
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
     }
+
+    // ── Analytics Loader ──────────────────────────────────────────────────
+    async function loadAnalytics() {
+      try {
+        const res = await fetch(`${API_BASE}/analytics`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        document.getElementById('statTotalDocs').textContent   = data.total_documents || 0;
+        document.getElementById('statTotalChunks').textContent = data.total_chunks || 0;
+        document.getElementById('statCompleted').textContent   = (data.status_breakdown && data.status_breakdown.completed) || 0;
+        document.getElementById('statFailed').textContent      = (data.status_breakdown && data.status_breakdown.failed) || 0;
+
+        // Render Status Breakdown
+        const statusBox = document.getElementById('analyticsStatusBox');
+        if (data.status_breakdown) {
+          const total = data.total_documents || 1;
+          const statusColors = { completed: '#34D399', processing: '#60A5FA', pending: '#FBBF24', failed: '#F87171' };
+          statusBox.innerHTML = Object.entries(data.status_breakdown).map(([status, count]) => {
+            const pct = Math.round((count / total) * 100);
+            const color = statusColors[status] || '#A5B4FC';
+            return `
+              <div style="margin-bottom: 0.65rem;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.25rem;">
+                  <span style="text-transform: capitalize; font-weight: 600; color: ${color};">${status}</span>
+                  <span style="color: var(--text-muted); font-family: var(--font-code);">${count} (${pct}%)</span>
+                </div>
+                <div style="background: rgba(255,255,255,0.06); border-radius: 99px; height: 6px; overflow: hidden;">
+                  <div style="width: ${pct}%; height: 100%; background: ${color}; border-radius: 99px;"></div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        // Render Source Breakdown
+        const sourcesBox = document.getElementById('analyticsSourcesBox');
+        if (data.source_breakdown) {
+          sourcesBox.innerHTML = `
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+              ${Object.entries(data.source_breakdown).map(([src, count]) => `
+                <div style="background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); border-radius: 8px; padding: 0.5rem 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-main); text-transform: uppercase;">${src}</span>
+                  <span class="score-badge" style="background: rgba(99,102,241,0.2); color: #A5B4FC;">${count}</span>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        }
+
+        // Render Recent Completed
+        const recCompBox = document.getElementById('analyticsRecentCompleted');
+        if (data.recent_completed && data.recent_completed.length > 0) {
+          recCompBox.innerHTML = data.recent_completed.map(doc => `
+            <div style="font-size: 0.8rem; padding: 0.4rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between;">
+              <span style="color: var(--text-main); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;">${escapeHtml(doc.title)}</span>
+              <span style="color: var(--text-dim); font-size: 0.72rem;">${doc.source_type}</span>
+            </div>
+          `).join('');
+        } else {
+          recCompBox.innerHTML = '<p style="font-size: 0.8rem; color: var(--text-dim);">Nenhum documento recente.</p>';
+        }
+
+        // Render Recent Failed
+        const recFailBox = document.getElementById('analyticsRecentFailed');
+        if (data.recent_failed && data.recent_failed.length > 0) {
+          recFailBox.innerHTML = data.recent_failed.map(doc => `
+            <div style="font-size: 0.78rem; padding: 0.4rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+              <div style="color: #FCA5A5; font-weight: 600;">${escapeHtml(doc.title)}</div>
+              <div style="color: var(--text-dim); font-family: var(--font-code); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(doc.error_message)}</div>
+            </div>
+          `).join('');
+        } else {
+          recFailBox.innerHTML = '<p style="font-size: 0.8rem; color: var(--text-dim);">Nenhuma falha recente registrada.</p>';
+        }
+
+      } catch (err) {
+        console.error('Failed to load analytics', err);
+      }
+    }
   </script>
+
 
 </body>
 </html>

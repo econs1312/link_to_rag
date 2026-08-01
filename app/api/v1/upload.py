@@ -1,4 +1,4 @@
-﻿"""
+"""
 Upload endpoint: accepts PDF, DOCX, and image files for extraction and RAG ingestion.
 
 Flow:
@@ -25,6 +25,9 @@ from app.services.chunker import ChunkingService
 from app.services.embedding import EmbeddingService
 from app.models.document import DocumentChunk
 
+from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, HTTPException, status, Request
+from app.core.security import verify_api_key, extract_tenant_id
+
 router = APIRouter()
 
 # 50 MB max upload size
@@ -46,12 +49,16 @@ ALLOWED_EXTENSIONS_DISPLAY = ", ".join(sorted(SUPPORTED_EXTENSIONS.keys()))
     ),
 )
 async def upload_file(
+    request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     file: UploadFile = File(..., description="File to upload (PDF, DOCX, or image)"),
     category: Optional[str] = Form(None, description="Optional metadata category tag"),
     webhook_url: Optional[str] = Form(None, description="Optional webhook URL for job completion notification"),
+    api_key: Optional[str] = Depends(verify_api_key),
 ):
+    tenant_id = extract_tenant_id(request)
+
     # ── 1. Validate file type ────────────────────────────────────────────────
     file_type = detect_file_type(file.filename or "", file.content_type)
     if not file_type:
@@ -85,25 +92,30 @@ async def upload_file(
         filename=filename,
         file_type=file_type,
         file_size_kb=file_size // 1024,
+        tenant_id=tenant_id,
     )
     log.info("File upload received, creating ingestion job")
 
     # ── 3. Create Document record ────────────────────────────────────────────
+    metadata_info = {
+        "filename": filename,
+        "file_type": file_type,
+        "file_size_bytes": file_size,
+        "content_type": file.content_type,
+        **({"category": category} if category else {}),
+        **({"tenant_id": tenant_id} if tenant_id else {}),
+    }
+
     document = Document(
         id=job_id,
         correlation_id=correlation_id,
         source_url=f"file://{filename}",
         source_type=f"file_{file_type}",
         title=filename,
-        metadata_info={
-            "filename": filename,
-            "file_type": file_type,
-            "file_size_bytes": file_size,
-            "content_type": file.content_type,
-            **({"category": category} if category else {}),
-        },
+        metadata_info=metadata_info,
         status=IngestionStatus.PENDING,
     )
+
     db.add(document)
     await db.commit()
     await db.refresh(document)

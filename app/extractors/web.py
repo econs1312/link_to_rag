@@ -50,14 +50,62 @@ class WebExtractor(BaseExtractor):
                         source_url=url,
                     )
 
-                logger.warning("Jina Reader API returned non-200. Attempting direct HTML HTTP fallback.", status_code=response.status_code)
-                return await self._fallback_direct_fetch(url)
+                logger.warning("Jina Reader API returned non-200. Trying Firecrawl or direct HTTP fallback.", status_code=response.status_code)
+                return await self._try_firecrawl_or_direct_fallback(url)
 
         except (RateLimitError, ExtractionError):
             raise
         except Exception as exc:
-            logger.warning("Jina Reader API failed. Executing direct HTTP fallback", error=str(exc))
-            return await self._fallback_direct_fetch(url)
+            logger.warning("Jina Reader API failed. Trying Firecrawl or direct HTTP fallback", error=str(exc))
+            return await self._try_firecrawl_or_direct_fallback(url)
+
+    async def _try_firecrawl_or_direct_fallback(self, url: str) -> ExtractedContent:
+        """Try Firecrawl API if configured, otherwise fall back to direct HTTP fetch."""
+        if settings.FIRECRAWL_API_KEY:
+            try:
+                logger.info("Attempting Firecrawl API extraction", target_url=url)
+                return await self._extract_via_firecrawl(url)
+            except Exception as exc:
+                logger.warning("Firecrawl API failed. Falling back to direct HTTP fetch", error=str(exc))
+        return await self._fallback_direct_fetch(url)
+
+    async def _extract_via_firecrawl(self, url: str) -> ExtractedContent:
+        """Extract content via Firecrawl API (https://api.firecrawl.dev/v1/scrape)."""
+        firecrawl_url = "https://api.firecrawl.dev/v1/scrape"
+        headers = {
+            "Authorization": f"Bearer {settings.FIRECRAWL_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "url": url,
+            "formats": ["markdown"],
+            "onlyMainContent": True,
+        }
+
+        async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
+            resp = await client.post(firecrawl_url, json=payload, headers=headers)
+            if resp.status_code == 429:
+                self.record_failure(url, is_block_or_rate_limit=True)
+                raise RateLimitError(f"Rate limited by Firecrawl API for {url}", retry_after=60)
+
+            resp.raise_for_status()
+            data = resp.json()
+
+            data_obj = data.get("data", {})
+            content_markdown = data_obj.get("markdown") or data_obj.get("content") or ""
+            metadata = data_obj.get("metadata", {})
+            title = metadata.get("title") or metadata.get("ogTitle") or self._extract_title_from_url(url)
+            author = metadata.get("author") or "Web Page"
+
+            self.record_success(url)
+            return ExtractedContent(
+                raw_text=content_markdown,
+                title=title,
+                author=author,
+                metadata={"extractor": "Firecrawl", "status_code": 200, **metadata},
+                source_url=url,
+            )
+
 
     async def _fallback_direct_fetch(self, url: str) -> ExtractedContent:
         """Direct HTTP GET fallback using httpx."""

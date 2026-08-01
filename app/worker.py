@@ -6,7 +6,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging, logger
 from app.db.session import AsyncSessionLocal
 from app.services.ingestion_pipeline import IngestionPipelineService
-from app.core.exceptions import RateLimitError
+from app.core.exceptions import RateLimitError, CircuitBreakerOpenError
 
 
 def parse_redis_url(url: str) -> RedisSettings:
@@ -37,6 +37,16 @@ async def process_ingestion_job(ctx: dict, job_id: str, correlation_id: str, web
             log.warning("Worker hit rate limit. Retrying with delay", retry_after=rle.retry_after)
             if job_try < settings.MAX_RETRIES:
                 raise Retry(defer=rle.retry_after)
+            raise
+
+        except CircuitBreakerOpenError as cbe:
+            log.warning(
+                "Circuit breaker open for domain. Deferring job retry until cooldown expires",
+                domain=cbe.domain,
+                cooldown_seconds=settings.CIRCUIT_BREAKER_COOLDOWN_SECONDS,
+            )
+            if job_try < settings.MAX_RETRIES:
+                raise Retry(defer=settings.CIRCUIT_BREAKER_COOLDOWN_SECONDS)
             raise
 
         except Exception as exc:

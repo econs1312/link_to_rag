@@ -19,8 +19,11 @@ class Settings(BaseSettings):
     # External API Keys & Proxies
     OPENAI_API_KEY: Optional[str] = None
     JINA_API_KEY: Optional[str] = None
+    FIRECRAWL_API_KEY: Optional[str] = None
     APIFY_API_TOKEN: Optional[str] = None
     PROXY_URL: Optional[str] = None
+    API_KEYS: Optional[str] = None  # Comma-separated list of valid API keys for multi-tenancy auth
+
 
     # Chunking & Vector Settings
     CHUNK_SIZE: int = 800

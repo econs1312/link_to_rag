@@ -61,11 +61,16 @@ async def app_exception_handler(request: Request, exc: AppException):
     )
 
 
+from app.api.v1.upload import router as upload_router
+from app.api.v1.analytics import router as analytics_router
+
 # Include Routers
 app.include_router(ingest_router, prefix="/api/v1", tags=["Ingestion"])
 app.include_router(jobs_router, prefix="/api/v1", tags=["Jobs"])
 app.include_router(search_router, prefix="/api/v1", tags=["Search"])
 app.include_router(upload_router, prefix="/api/v1", tags=["Upload"])
+app.include_router(analytics_router, prefix="/api/v1", tags=["Analytics"])
+
 
 
 import os
