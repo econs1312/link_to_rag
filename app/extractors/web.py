@@ -79,7 +79,11 @@ class WebExtractor(BaseExtractor):
                     self.record_failure(url, is_block_or_rate_limit=True)
                     raise ExtractionError(f"Access forbidden (HTTP {resp.status_code}) for target site {url}")
 
-                resp.raise_for_status()
+                if resp.status_code >= 400:
+                    self.record_failure(url, is_block_or_rate_limit=resp.status_code in (429, 503))
+                    raise ExtractionError(
+                        f"HTTP {resp.status_code} error fetching {url}: {resp.reason_phrase}"
+                    )
 
                 # Basic HTML cleaning / text extraction fallback
                 raw_html = resp.text

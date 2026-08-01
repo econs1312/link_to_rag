@@ -33,8 +33,9 @@ class YouTubeExtractor(BaseExtractor):
             else:
                 snippets = api.fetch(video_id)
                 return [s.text if hasattr(s, "text") else s.get("text", "") for s in snippets]
-        except Exception:
+        except Exception as lang_exc:
             # Fallback to fetch without language constraint if language matching fails
+            logger.debug("Language-constrained transcript fetch failed, retrying without language filter", video_id=video_id, error=str(lang_exc))
             snippets = api.fetch(video_id)
             return [s.text if hasattr(s, "text") else s.get("text", "") for s in snippets]
 
@@ -65,7 +66,11 @@ class YouTubeExtractor(BaseExtractor):
             )
 
         except (TranscriptsDisabled, NoTranscriptFound) as exc:
-            logger.warning("Transcript disabled or not found. Attempting Whisper audio fallback...", video_id=video_id)
+            logger.warning(
+                "Transcript disabled or not found, falling back to Whisper audio transcription",
+                video_id=video_id,
+                reason=str(exc),
+            )
             return await self._whisper_fallback(video_id, url)
         except Exception as exc:
             logger.error("YouTube transcript extraction failed", video_id=video_id, error=str(exc))
@@ -75,28 +80,36 @@ class YouTubeExtractor(BaseExtractor):
     async def _whisper_fallback(self, video_id: str, url: str) -> ExtractedContent:
         """Fallback method utilizing yt-dlp to extract audio and OpenAI Whisper API if configured."""
         if not settings.OPENAI_API_KEY:
-            logger.warning("OpenAI API Key not configured for Whisper fallback.")
+            logger.warning("OpenAI API Key not configured for Whisper fallback. Returning placeholder.", video_id=video_id)
             self.record_success(url)
             return ExtractedContent(
-                raw_text=f"[Transcrições desabilitadas para o vídeo YouTube {video_id}]",
+                raw_text=f"[Transcrições desabilitadas para o vídeo YouTube {video_id}. Para transcrição automática via Whisper, configure a OPENAI_API_KEY no arquivo .env]",
                 title=f"YouTube Video ({video_id})",
                 author="YouTube Channel",
-                metadata={"video_id": video_id, "platform": "youtube", "fallback_used": "none"},
+                metadata={"video_id": video_id, "platform": "youtube", "fallback_used": "none", "has_transcript": False},
                 source_url=url,
             )
 
-        # Implementation for yt-dlp + whisper API call
         try:
-            logger.info("Executing yt-dlp + OpenAI Whisper fallback", video_id=video_id)
-            # Simulating audio transcript fetch
+            logger.info("Executing yt-dlp + OpenAI Whisper audio transcription fallback", video_id=video_id)
+            from app.services.audio_transcriber import audio_transcriber
+            whisper_text = await audio_transcriber.transcribe_video_audio(url)
+
             self.record_success(url)
             return ExtractedContent(
-                raw_text=f"[Transcrição gerada via OpenAI Whisper para o vídeo {video_id}]",
+                raw_text=whisper_text or f"[Transcrição de áudio não disponível para o vídeo {video_id}]",
                 title=f"YouTube Video ({video_id})",
                 author="YouTube Channel",
-                metadata={"video_id": video_id, "platform": "youtube", "fallback_used": "whisper"},
+                metadata={
+                    "video_id": video_id,
+                    "platform": "youtube",
+                    "fallback_used": "whisper",
+                    "has_transcript": bool(whisper_text),
+                },
                 source_url=url,
             )
         except Exception as exc:
+            logger.error("Whisper fallback failed for YouTube video", video_id=video_id, error=str(exc))
             self.record_failure(url, is_block_or_rate_limit=False)
             raise ExtractionError(f"Whisper fallback failed for YouTube video {video_id}: {str(exc)}")
+

@@ -7,6 +7,11 @@ class IngestRequest(BaseModel):
     url: HttpUrl = Field(..., description="Target URL to extract and process for RAG")
     source_type: Optional[str] = Field(None, description="Optional override for source platform (youtube, web, social)")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Custom metadata tags (tenant_id, category, etc.)")
+    webhook_url: Optional[HttpUrl] = Field(
+        None,
+        description="Optional webhook URL to receive a POST notification when the job completes or fails. Useful for integration with n8n, Make.com, Zapier, etc.",
+    )
+
 
 
 class IngestResponse(BaseModel):

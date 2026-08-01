@@ -19,17 +19,17 @@ def parse_redis_url(url: str) -> RedisSettings:
     )
 
 
-async def process_ingestion_job(ctx: dict, job_id: str, correlation_id: str) -> str:
+async def process_ingestion_job(ctx: dict, job_id: str, correlation_id: str, webhook_url: str | None = None) -> str:
     """ARQ async worker task for document ingestion."""
     job_try = ctx.get("job_try", 1)
 
     log = logger.bind(job_id=job_id, correlation_id=correlation_id, job_try=job_try)
-    log.info("Worker picked up ingestion task")
+    log.info("Worker picked up ingestion task", has_webhook=bool(webhook_url))
 
     async with AsyncSessionLocal() as db:
         pipeline = IngestionPipelineService(db)
         try:
-            doc = await pipeline.process_document(job_id)
+            doc = await pipeline.process_document(job_id, webhook_url=webhook_url)
             log.info("Worker task processed successfully", document_id=doc.id)
             return doc.id
 
@@ -46,6 +46,7 @@ async def process_ingestion_job(ctx: dict, job_id: str, correlation_id: str) -> 
                 log.info("Scheduling task retry", backoff_delay=backoff_delay)
                 raise Retry(defer=backoff_delay)
             raise
+
 
 
 async def startup(ctx: dict):

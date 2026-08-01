@@ -57,21 +57,22 @@ async def enqueue_ingestion(
     await db.refresh(document)
 
     # 2. Enqueue job into ARQ Redis Queue (or fallback to background tasks if Redis is unavailable)
+    webhook_url_str = str(payload.webhook_url) if payload.webhook_url else None
     try:
         redis_pool = await get_redis_pool()
-        await redis_pool.enqueue_job("process_ingestion_job", job_id, correlation_id)
+        await redis_pool.enqueue_job("process_ingestion_job", job_id, correlation_id, webhook_url_str)
         await redis_pool.close()
         log.info("Job successfully enqueued to ARQ Redis", job_id=job_id)
     except Exception as exc:
         log.warning("Redis enqueue failed. Falling back to in-process FastAPI BackgroundTasks", error=str(exc))
         
-        async def run_pipeline_fallback(doc_id: str):
+        async def run_pipeline_fallback(doc_id: str, wh_url: str | None = None):
             from app.db.session import AsyncSessionLocal
             async with AsyncSessionLocal() as local_db:
                 pipeline = IngestionPipelineService(local_db)
-                await pipeline.process_document(doc_id)
+                await pipeline.process_document(doc_id, webhook_url=wh_url)
 
-        background_tasks.add_task(run_pipeline_fallback, job_id)
+        background_tasks.add_task(run_pipeline_fallback, job_id, webhook_url_str)
 
     return IngestResponse(
         job_id=job_id,

@@ -18,7 +18,7 @@ class IngestionPipelineService:
         self.chunker = ChunkingService()
         self.embedding_service = EmbeddingService()
 
-    async def process_document(self, document_id: str) -> Document:
+    async def process_document(self, document_id: str, webhook_url: str | None = None) -> Document:
         # 1. Fetch document from DB
         stmt = select(Document).where(Document.id == document_id)
         res = await self.db.execute(stmt)
@@ -84,13 +84,45 @@ class IngestionPipelineService:
             await self.db.refresh(doc)
 
             log.info("Document ingestion pipeline completed successfully")
+
+            # Fire webhook notification on success (best-effort)
+            if webhook_url:
+                from app.services.webhook import fire_webhook
+                await fire_webhook(str(webhook_url), {
+                    "job_id": doc.id,
+                    "status": "completed",
+                    "title": doc.title,
+                    "source_url": doc.source_url,
+                    "document_id": doc.id,
+                })
+
             return doc
 
         except Exception as exc:
             await self.db.rollback()
 
             log.error("Ingestion pipeline failed", error=str(exc))
-            doc.status = IngestionStatus.FAILED
-            doc.error_message = str(exc)
-            await self.db.commit()
+
+            # Re-fetch document after rollback to avoid DetachedInstanceError
+            try:
+                stmt_retry = select(Document).where(Document.id == document_id)
+                res_retry = await self.db.execute(stmt_retry)
+                doc_retry = res_retry.scalar_one_or_none()
+                if doc_retry:
+                    doc_retry.status = IngestionStatus.FAILED
+                    doc_retry.error_message = str(exc)[:1000]  # Truncate to avoid DB overflow
+                    await self.db.commit()
+            except Exception as db_exc:
+                log.error("Failed to update document status to FAILED after pipeline error", db_error=str(db_exc))
+
+            # Fire webhook notification on failure (best-effort)
+            if webhook_url:
+                from app.services.webhook import fire_webhook
+                await fire_webhook(str(webhook_url), {
+                    "job_id": document_id,
+                    "status": "failed",
+                    "error": str(exc),
+                })
+
             raise
+

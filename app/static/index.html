@@ -636,6 +636,21 @@
           </button>
         </form>
 
+        <!-- Optional Webhook URL -->
+        <div style="margin-top: -0.5rem; margin-bottom: 1.25rem;">
+          <label for="webhookInput" style="font-size: 0.8rem; color: var(--text-dim); font-weight: 500; display: block; margin-bottom: 0.4rem;">
+            <i class="fa-solid fa-webhook" style="color: var(--accent-emerald);"></i>
+            Webhook de Notificação (Opcional)
+          </label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-bell input-icon"></i>
+            <input type="url" id="webhookInput" placeholder="https://seu-n8n.com/webhook/... ou Make.com / Zapier">
+          </div>
+          <p style="font-size: 0.72rem; color: var(--text-dim); margin-top: 0.3rem;">
+            Se preenchido, um POST com o resultado será enviado a esta URL quando o job concluir.
+          </p>
+        </div>
+
         <!-- Status Tracker Progress -->
         <div id="statusTracker" class="status-tracker">
           <div class="tracker-header">
@@ -682,15 +697,26 @@
 
             <!-- Extracted Markdown Content Viewer -->
             <div style="margin-top: 1rem;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.4rem;">
                 <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">
                   <i class="fa-solid fa-file-lines" style="color: var(--accent-primary);"></i> Conteúdo Extraído (Markdown)
                 </span>
-                <button type="button" class="preset-btn" onclick="copyExtractedContent()">
-                  <i class="fa-solid fa-copy"></i> Copiar Texto
-                </button>
+                <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                  <button type="button" class="preset-btn" onclick="copyExtractedContent()">
+                    <i class="fa-solid fa-copy"></i> Copiar
+                  </button>
+                  <button type="button" class="preset-btn" id="exportMdBtn" onclick="exportDoc('md')" title="Baixar Markdown">
+                    <i class="fa-solid fa-file-arrow-down"></i> .md
+                  </button>
+                  <button type="button" class="preset-btn" id="exportTxtBtn" onclick="exportDoc('txt')" title="Baixar Texto Simples">
+                    <i class="fa-solid fa-file-arrow-down"></i> .txt
+                  </button>
+                  <button type="button" class="preset-btn" id="exportJsonBtn" onclick="exportDoc('json')" title="Baixar JSON completo">
+                    <i class="fa-solid fa-file-code"></i> .json
+                  </button>
+                </div>
               </div>
-              <div id="resCleanedText" class="chunk-text-box" style="max-height: 220px; overflow-y: auto; font-size: 0.85rem;">-</div>
+              <div id="resCleanedText" class="chunk-text-box" style="max-height: 300px; overflow-y: auto; font-size: 0.83rem; white-space: pre-wrap; line-height: 1.6;">-</div>
             </div>
           </div>
 
@@ -795,17 +821,21 @@
       document.getElementById('urlInput').value = url;
     }
 
+    let currentDocId = null;
+
     // Handle Ingest Form Submit
     async function handleIngest(e) {
       e.preventDefault();
       const url = document.getElementById('urlInput').value;
       const sourceType = document.getElementById('sourceTypeSelect').value || null;
       const category = document.getElementById('categoryInput').value || null;
+      const webhookUrl = document.getElementById('webhookInput').value || null;
 
       const payload = {
         url: url,
         source_type: sourceType,
-        metadata: category ? { category: category } : {}
+        metadata: category ? { category: category } : {},
+        webhook_url: webhookUrl || undefined,
       };
 
       const btn = document.getElementById('btnIngestSubmit');
@@ -870,11 +900,17 @@
 
           if (status === 'completed') {
             clearInterval(jobPollInterval);
+            currentDocId = data.document_id || data.job_id;
             document.getElementById('jobResultBox').style.display = 'block';
             document.getElementById('resTitle').innerText = data.title || 'Untitled';
             document.getElementById('resAuthor').innerText = data.author || 'Desconhecido';
-            document.getElementById('resDocId').innerText = data.document_id || data.job_id;
+            document.getElementById('resDocId').innerText = currentDocId;
             document.getElementById('resCleanedText').innerText = data.cleaned_markdown || 'Nenhum conteúdo textual extraído.';
+            // Enable export buttons
+            ['exportMdBtn','exportTxtBtn','exportJsonBtn'].forEach(id => {
+              const btn = document.getElementById(id);
+              if (btn) btn.disabled = false;
+            });
           } else if (status === 'failed') {
             clearInterval(jobPollInterval);
             document.getElementById('jobErrorBox').style.display = 'block';
@@ -889,7 +925,21 @@
     function copyExtractedContent() {
       const text = document.getElementById('resCleanedText').innerText;
       navigator.clipboard.writeText(text);
-      alert('Conteúdo copiado para a área de transferência!');
+      const btn = event.currentTarget;
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> Copiado!';
+      setTimeout(() => btn.innerHTML = orig, 2000);
+    }
+
+    function exportDoc(format) {
+      if (!currentDocId) return;
+      const url = `${API_BASE}/documents/${currentDocId}/export?format=${format}`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     function updateStepState(status) {

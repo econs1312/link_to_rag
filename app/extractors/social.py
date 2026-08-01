@@ -46,9 +46,17 @@ class SocialMediaExtractor(BaseExtractor):
         author = data.get("uploader") or data.get("channel") or "Social Media Account"
         description = data.get("description") or data.get("fulltitle") or title
 
-        # Extract spoken audio transcription (Whisper AI)
-        from app.services.audio_transcriber import audio_transcriber
-        audio_transcript = await audio_transcriber.transcribe_video_audio(url)
+        # Extract spoken audio transcription (Whisper AI) — graceful fallback if unavailable
+        audio_transcript = ""
+        try:
+            from app.services.audio_transcriber import audio_transcriber
+            audio_transcript = await audio_transcriber.transcribe_video_audio(url)
+        except Exception as audio_exc:
+            logger.warning(
+                "Audio transcription failed for social media video, continuing with text-only content",
+                target_url=url,
+                error=str(audio_exc),
+            )
         full_content = f"{description}{audio_transcript}"
 
         self.record_success(url)

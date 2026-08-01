@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import PlainTextResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from typing import Literal
 from app.db.session import get_db
 from app.models.document import Document
 from app.schemas.ingestion import JobStatusResponse
@@ -40,3 +42,73 @@ async def get_job_status(
         created_at=doc.created_at,
         updated_at=doc.updated_at,
     )
+
+
+@router.get(
+    "/documents/{doc_id}/export",
+    summary="Export document content in the specified format (md, txt, json)",
+    responses={
+        200: {"description": "Document content in the requested format"},
+        404: {"description": "Document not found"},
+        400: {"description": "Document not yet completed"},
+    },
+)
+async def export_document(
+    doc_id: str,
+    format: Literal["md", "txt", "json"] = Query(default="md", description="Export format: md (Markdown), txt (plain text), json (full metadata + content)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Download the extracted and cleaned content of an ingested document.
+
+    - **md**: Returns the cleaned Markdown with YAML frontmatter
+    - **txt**: Returns plain text (frontmatter stripped)
+    - **json**: Returns full document metadata + content as JSON
+    """
+    stmt = select(Document).where(Document.id == doc_id)
+    res = await db.execute(stmt)
+    doc = res.scalar_one_or_none()
+
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
+
+    if doc.status.value not in ("completed",):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Document is not yet completed (current status: {doc.status.value}). Try again after processing finishes.",
+        )
+
+    content_md = doc.cleaned_markdown or doc.raw_text or ""
+    safe_title = (doc.title or doc_id).replace("/", "-").replace("\\", "-")[:60]
+
+    if format == "json":
+        return JSONResponse(
+            content={
+                "document_id": doc.id,
+                "title": doc.title,
+                "author": doc.author,
+                "source_url": doc.source_url,
+                "source_type": doc.source_type,
+                "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                "metadata": doc.metadata_info or {},
+                "content_markdown": content_md,
+                "raw_text": doc.raw_text or "",
+            },
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.json"'},
+        )
+
+    if format == "txt":
+        import re
+        # Strip YAML frontmatter block (--- ... ---) for plain text export
+        plain_text = re.sub(r"^---\n.*?\n---\n", "", content_md, flags=re.DOTALL).strip()
+        return PlainTextResponse(
+            content=plain_text,
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.txt"'},
+        )
+
+    # Default: Markdown
+    return PlainTextResponse(
+        content=content_md,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.md"'},
+    )
+
