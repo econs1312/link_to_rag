@@ -10,7 +10,7 @@ class LinkRouter:
     """Intelligent router selecting the appropriate extraction strategy based on URL domain."""
 
     SOCIAL_DOMAINS_REGEX = re.compile(
-        r"(?:https?://)?(?:www\.)?(?:instagram\.com|twitter\.com|x\.com|linkedin\.com|tiktok\.com)",
+        r"(?:https?://)?(?:www\.)?(?:instagram\.com|twitter\.com|x\.com|linkedin\.com|tiktok\.com|facebook\.com|fb\.watch|fb\.com)",
         re.IGNORECASE,
     )
 
