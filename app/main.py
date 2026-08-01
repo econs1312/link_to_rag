@@ -9,6 +9,7 @@ from app.db.session import init_db
 from app.api.v1.ingest import router as ingest_router
 from app.api.v1.jobs import router as jobs_router
 from app.api.v1.search import router as search_router
+from app.api.v1.upload import router as upload_router
 
 
 @asynccontextmanager
@@ -64,6 +65,7 @@ async def app_exception_handler(request: Request, exc: AppException):
 app.include_router(ingest_router, prefix="/api/v1", tags=["Ingestion"])
 app.include_router(jobs_router, prefix="/api/v1", tags=["Jobs"])
 app.include_router(search_router, prefix="/api/v1", tags=["Search"])
+app.include_router(upload_router, prefix="/api/v1", tags=["Upload"])
 
 
 import os

@@ -16,3 +16,10 @@ pyyaml>=6.0.1
 python-multipart>=0.0.9
 pytest>=8.1.0
 pytest-asyncio>=0.23.0
+
+# File Upload & OCR dependencies
+pymupdf>=1.24.0
+python-docx>=1.1.0
+pytesseract>=0.3.13
+Pillow>=10.3.0
+python-magic>=0.4.27

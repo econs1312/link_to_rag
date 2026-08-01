@@ -544,6 +544,33 @@
       color: var(--accent-primary);
       width: 30px;
     }
+
+    /* ── Upload Drop Zone ─────────────────────────────────────────────── */
+    .upload-drop-zone {
+      border: 2px dashed rgba(245, 158, 11, 0.35);
+      border-radius: 14px;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      background: rgba(245, 158, 11, 0.04);
+      color: var(--text-muted);
+      transition: all 0.25s ease;
+      position: relative;
+    }
+
+    .upload-drop-zone:hover,
+    .upload-drop-zone.drag-over {
+      border-color: rgba(245, 158, 11, 0.7);
+      background: rgba(245, 158, 11, 0.09);
+      color: var(--text-main);
+      transform: scale(1.005);
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.15);
+    }
+
+    .upload-drop-zone.has-file {
+      border-color: rgba(16, 185, 129, 0.5);
+      background: rgba(16, 185, 129, 0.05);
+    }
   </style>
 </head>
 <body>
@@ -572,6 +599,9 @@
     <div class="nav-tabs">
       <button class="tab-btn active" onclick="switchTab('ingestTab')">
         <i class="fa-solid fa-cloud-arrow-up"></i> Ingerir Link
+      </button>
+      <button class="tab-btn" onclick="switchTab('uploadTab')">
+        <i class="fa-solid fa-file-arrow-up"></i> Upload de Arquivo
       </button>
       <button class="tab-btn" onclick="switchTab('searchTab')">
         <i class="fa-solid fa-magnifying-glass"></i> Busca Vetorial
@@ -776,6 +806,179 @@
 
         <div id="historyList">
           <p style="color: var(--text-dim); text-align: center; padding: 2rem;">Nenhum job de ingestão executado ainda nesta sessão.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: FILE UPLOAD -->
+    <div id="uploadTab" class="tab-pane">
+      <div class="glass-card">
+        <h2 class="card-title">
+          <i class="fa-solid fa-file-arrow-up" style="color: #F59E0B;"></i>
+          Upload de Arquivo &mdash; PDF, DOCX &amp; Imagens com OCR
+        </h2>
+        <p class="card-subtitle">
+          Faça upload de documentos locais para extração de texto e ingestão no pipeline RAG.
+          <strong style="color: var(--text-main);">PDF</strong> usa pymupdf + OCR por página,
+          <strong style="color: var(--text-main);">DOCX</strong> extrai parágrafos e tabelas,
+          <strong style="color: var(--text-main);">Imagens</strong> usam OpenAI Vision ou Tesseract OCR.
+        </p>
+
+        <!-- Supported formats badges -->
+        <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.25rem;">
+          <span style="background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #F87171; padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600;">
+            <i class="fa-solid fa-file-pdf"></i> PDF
+          </span>
+          <span style="background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: #93C5FD; padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600;">
+            <i class="fa-solid fa-file-word"></i> DOCX
+          </span>
+          <span style="background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #6EE7B7; padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600;">
+            <i class="fa-solid fa-image"></i> PNG / JPG / TIFF / WEBP
+          </span>
+          <span style="background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); color: #FCD34D; padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600;">
+            <i class="fa-solid fa-eye"></i> OCR: Tesseract + OpenAI Vision
+          </span>
+          <span style="background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.3); color: #A5B4FC; padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600;">
+            <i class="fa-solid fa-weight-hanging"></i> Máx: 50 MB
+          </span>
+        </div>
+
+        <!-- Drag & Drop Zone -->
+        <div id="uploadDropZone" class="upload-drop-zone" onclick="document.getElementById('fileInput').click()">
+          <input type="file" id="fileInput" hidden
+            accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.tiff,.tif,.bmp,.gif,.webp"
+            onchange="handleFileSelect(this.files[0])"
+          >
+          <div id="dropZoneContent">
+            <div style="font-size: 3rem; margin-bottom: 0.75rem; opacity: 0.6;">
+              <i class="fa-solid fa-cloud-arrow-up"></i>
+            </div>
+            <div style="font-weight: 600; font-size: 1rem; color: var(--text-main); margin-bottom: 0.3rem;">
+              Arraste um arquivo aqui ou clique para selecionar
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-dim);">
+              PDF, DOCX, PNG, JPG, TIFF, WEBP &mdash; até 50 MB
+            </div>
+          </div>
+        </div>
+
+        <!-- File preview (shown after selection) -->
+        <div id="filePreview" style="display:none; background: rgba(255,255,255,0.03); border: 1px solid var(--panel-border); border-radius: 10px; padding: 0.85rem 1rem; margin-top: 0.75rem; display: none; align-items: center; gap: 0.75rem;">
+          <div id="fileTypeIcon" style="font-size: 1.8rem;"></div>
+          <div style="flex: 1; min-width: 0;">
+            <div id="filePreviewName" style="font-weight: 600; color: var(--text-main); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+            <div id="filePreviewSize" style="font-size: 0.75rem; color: var(--text-dim); margin-top: 0.1rem;"></div>
+          </div>
+          <button type="button" class="preset-btn" onclick="clearFileSelection()" style="flex-shrink: 0;">
+            <i class="fa-solid fa-xmark"></i> Remover
+          </button>
+        </div>
+
+        <!-- Optional fields -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="uploadCategoryInput">Categoria / Tag (Opcional)</label>
+            <div class="input-wrapper">
+              <i class="fa-solid fa-tag input-icon"></i>
+              <input type="text" id="uploadCategoryInput" placeholder="ex: Relatório, Contrato, Manual">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="uploadWebhookInput">Webhook URL (Opcional)</label>
+            <div class="input-wrapper">
+              <i class="fa-solid fa-bell input-icon"></i>
+              <input type="url" id="uploadWebhookInput" placeholder="https://webhook.site/...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Upload progress bar -->
+        <div id="uploadProgressBar" style="display:none; margin-top: 1rem;">
+          <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-dim); margin-bottom: 0.35rem;">
+            <span id="uploadProgressLabel">Enviando arquivo...</span>
+            <span id="uploadProgressPct">0%</span>
+          </div>
+          <div style="background: rgba(255,255,255,0.07); border-radius: 99px; height: 6px; overflow: hidden;">
+            <div id="uploadProgressFill" style="height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent-primary), var(--accent-emerald)); width: 0%; transition: width 0.3s ease;"></div>
+          </div>
+        </div>
+
+        <button type="button" class="btn-submit" id="btnUploadSubmit" onclick="handleFileUpload()" style="margin-top: 1rem; background: linear-gradient(135deg, #F59E0B, #D97706); box-shadow: 0 4px 20px rgba(245,158,11,0.3);" disabled>
+          <i class="fa-solid fa-gears"></i> Processar Arquivo com OCR Pipeline
+        </button>
+
+        <!-- Status tracker (reuse same pattern as ingest tab) -->
+        <div id="uploadStatusTracker" class="status-tracker" style="display:none; margin-top: 1.5rem;">
+          <div class="tracker-header">
+            <div>
+              <span style="font-weight: 700;">Status da Extração</span>
+              <span class="job-id-pill" id="uploadTrackerJobId">Job ID: ...</span>
+            </div>
+            <span id="uploadTimerBadge" style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-code);">0.0s</span>
+          </div>
+          <div class="steps-container">
+            <div class="step-item" id="uploadStepPending">
+              <div class="step-icon"><i class="fa-solid fa-clock"></i></div>
+              <span class="step-label">Aguardando</span>
+            </div>
+            <div class="step-item" id="uploadStepProcessing">
+              <div class="step-icon"><i class="fa-solid fa-eye"></i></div>
+              <span class="step-label">Extração / OCR</span>
+            </div>
+            <div class="step-item" id="uploadStepCompleted">
+              <div class="step-icon"><i class="fa-solid fa-check"></i></div>
+              <span class="step-label">Vetorizado &amp; Salvo</span>
+            </div>
+          </div>
+
+          <div id="uploadResultBox" style="display:none;" class="result-box">
+            <h4 style="margin-bottom: 0.75rem; color: #34D399; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-circle-check"></i> Arquivo Processado com Sucesso!
+            </h4>
+            <div class="meta-grid">
+              <div class="meta-item">
+                <div class="meta-label">Título / Arquivo</div>
+                <div class="meta-value" id="uploadResTitle">-</div>
+              </div>
+              <div class="meta-item">
+                <div class="meta-label">Método de Extração</div>
+                <div class="meta-value" id="uploadResMethod">-</div>
+              </div>
+              <div class="meta-item">
+                <div class="meta-label">Document ID</div>
+                <div class="meta-value" id="uploadResDocId" style="font-family: var(--font-code); font-size: 0.8rem;">-</div>
+              </div>
+            </div>
+            <div style="margin-top: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.4rem;">
+                <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">
+                  <i class="fa-solid fa-file-lines" style="color: #F59E0B;"></i> Conteúdo Extraído
+                </span>
+                <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                  <button type="button" class="preset-btn" onclick="copyUploadContent()">
+                    <i class="fa-solid fa-copy"></i> Copiar
+                  </button>
+                  <button type="button" class="preset-btn" id="uploadExportMd" onclick="exportUploadDoc('md')">
+                    <i class="fa-solid fa-file-arrow-down"></i> .md
+                  </button>
+                  <button type="button" class="preset-btn" id="uploadExportTxt" onclick="exportUploadDoc('txt')">
+                    <i class="fa-solid fa-file-arrow-down"></i> .txt
+                  </button>
+                  <button type="button" class="preset-btn" id="uploadExportJson" onclick="exportUploadDoc('json')">
+                    <i class="fa-solid fa-file-code"></i> .json
+                  </button>
+                </div>
+              </div>
+              <div id="uploadResContent" class="chunk-text-box" style="max-height: 300px; overflow-y: auto; font-size: 0.83rem; white-space: pre-wrap; line-height: 1.6;">-</div>
+            </div>
+          </div>
+
+          <div id="uploadErrorBox" style="display:none;" class="result-box" style="border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.05);">
+            <h4 style="margin-bottom: 0.5rem; color: #F87171; font-size: 0.95rem;">
+              <i class="fa-solid fa-triangle-exclamation"></i> Falha no Processamento
+            </h4>
+            <p id="uploadResErrorMsg" style="font-size: 0.85rem; color: #FCA5A5; font-family: var(--font-code);"></p>
+          </div>
         </div>
       </div>
     </div>
@@ -1041,6 +1244,205 @@
     function escapeHtml(text) {
       return text ? text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
     }
+
+    // ── Upload Tab ────────────────────────────────────────────────────────
+    let selectedFile = null;
+    let uploadDocId = null;
+    let uploadPollInterval = null;
+    let uploadStartTime = null;
+
+    const FILE_ICONS = {
+      pdf:  '<i class="fa-solid fa-file-pdf" style="color:#F87171;"></i>',
+      docx: '<i class="fa-solid fa-file-word" style="color:#93C5FD;"></i>',
+      doc:  '<i class="fa-solid fa-file-word" style="color:#93C5FD;"></i>',
+      png:  '<i class="fa-solid fa-file-image" style="color:#6EE7B7;"></i>',
+      jpg:  '<i class="fa-solid fa-file-image" style="color:#6EE7B7;"></i>',
+      jpeg: '<i class="fa-solid fa-file-image" style="color:#6EE7B7;"></i>',
+      tiff: '<i class="fa-solid fa-file-image" style="color:#6EE7B7;"></i>',
+      tif:  '<i class="fa-solid fa-file-image" style="color:#6EE7B7;"></i>',
+      bmp:  '<i class="fa-solid fa-file-image" style="color:#6EE7B7;"></i>',
+      gif:  '<i class="fa-solid fa-file-image" style="color:#6EE7B7;"></i>',
+      webp: '<i class="fa-solid fa-file-image" style="color:#6EE7B7;"></i>',
+    };
+
+    function getFileIcon(filename) {
+      const ext = filename.split('.').pop().toLowerCase();
+      return FILE_ICONS[ext] || '<i class="fa-solid fa-file"></i>';
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+    }
+
+    function handleFileSelect(file) {
+      if (!file) return;
+      selectedFile = file;
+      const preview = document.getElementById('filePreview');
+      preview.style.display = 'flex';
+      document.getElementById('fileTypeIcon').innerHTML = getFileIcon(file.name);
+      document.getElementById('filePreviewName').textContent = file.name;
+      document.getElementById('filePreviewSize').textContent = formatBytes(file.size);
+      document.getElementById('uploadDropZone').classList.add('has-file');
+      document.getElementById('btnUploadSubmit').disabled = false;
+      document.getElementById('uploadStatusTracker').style.display = 'none';
+      document.getElementById('uploadResultBox').style.display = 'none';
+      document.getElementById('uploadErrorBox').style.display = 'none';
+    }
+
+    function clearFileSelection() {
+      selectedFile = null;
+      document.getElementById('fileInput').value = '';
+      document.getElementById('filePreview').style.display = 'none';
+      document.getElementById('uploadDropZone').classList.remove('has-file');
+      document.getElementById('btnUploadSubmit').disabled = true;
+    }
+
+    // Drag & Drop events — attached after DOM load
+    document.addEventListener('DOMContentLoaded', () => {
+      const zone = document.getElementById('uploadDropZone');
+      if (!zone) return;
+      zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) handleFileSelect(file);
+      });
+    });
+
+    async function handleFileUpload() {
+      if (!selectedFile) return;
+      const btn = document.getElementById('btnUploadSubmit');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      const cat = document.getElementById('uploadCategoryInput').value;
+      const wh  = document.getElementById('uploadWebhookInput').value;
+      if (cat) formData.append('category', cat);
+      if (wh)  formData.append('webhook_url', wh);
+
+      const progressBar   = document.getElementById('uploadProgressBar');
+      const progressFill  = document.getElementById('uploadProgressFill');
+      const progressPct   = document.getElementById('uploadProgressPct');
+      const progressLabel = document.getElementById('uploadProgressLabel');
+      progressBar.style.display = 'block';
+      progressFill.style.width  = '0%';
+
+      try {
+        const jobId = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', `${API_BASE}/upload`);
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const pct = Math.round((e.loaded / e.total) * 100);
+              progressFill.style.width = pct + '%';
+              progressPct.textContent  = pct + '%';
+              if (pct === 100) progressLabel.textContent = 'Aguardando processamento...';
+            }
+          };
+          xhr.onload = () => {
+            if (xhr.status === 202) {
+              resolve(JSON.parse(xhr.responseText).job_id);
+            } else {
+              try { reject(new Error(JSON.parse(xhr.responseText).detail || 'Erro no upload')); }
+              catch { reject(new Error('HTTP ' + xhr.status)); }
+            }
+          };
+          xhr.onerror = () => reject(new Error('Erro de rede no upload'));
+          xhr.send(formData);
+        });
+
+        document.getElementById('uploadStatusTracker').style.display = 'block';
+        document.getElementById('uploadTrackerJobId').innerText = 'Job ID: ' + jobId.substring(0, 8) + '...';
+        document.getElementById('uploadResultBox').style.display  = 'none';
+        document.getElementById('uploadErrorBox').style.display   = 'none';
+        jobHistory.unshift({ id: jobId, url: '📄 ' + selectedFile.name, created_at: new Date().toLocaleTimeString() });
+        renderHistory();
+        startUploadPolling(jobId);
+
+      } catch (err) {
+        progressBar.style.display = 'none';
+        alert('Erro no upload: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-gears"></i> Processar Arquivo com OCR Pipeline';
+      }
+    }
+
+    function startUploadPolling(jobId) {
+      if (uploadPollInterval) clearInterval(uploadPollInterval);
+      uploadStartTime = Date.now();
+      updateUploadStepState('pending');
+
+      uploadPollInterval = setInterval(async () => {
+        const elapsed = ((Date.now() - uploadStartTime) / 1000).toFixed(1);
+        document.getElementById('uploadTimerBadge').innerText = elapsed + 's';
+        try {
+          const res  = await fetch(`${API_BASE}/jobs/${jobId}`);
+          if (!res.ok) return;
+          const data   = await res.json();
+          const status = data.status.toLowerCase();
+          updateUploadStepState(status);
+
+          if (status === 'completed') {
+            clearInterval(uploadPollInterval);
+            uploadDocId = data.document_id || data.job_id;
+            document.getElementById('uploadProgressFill').style.width = '100%';
+            document.getElementById('uploadProgressPct').textContent  = '100%';
+            document.getElementById('uploadProgressLabel').textContent = 'Conclu\u00eddo!';
+            document.getElementById('uploadResultBox').style.display  = 'block';
+            document.getElementById('uploadResTitle').textContent     = data.title || (selectedFile && selectedFile.name) || '-';
+            document.getElementById('uploadResMethod').textContent    = (data.metadata_info && data.metadata_info.extraction_method) || 'N/A';
+            document.getElementById('uploadResDocId').textContent     = uploadDocId;
+            document.getElementById('uploadResContent').textContent   = data.cleaned_markdown || 'Nenhum conte\u00fado extra\u00eddo.';
+            document.getElementById('btnUploadSubmit').disabled = false;
+            document.getElementById('btnUploadSubmit').innerHTML = '<i class="fa-solid fa-gears"></i> Processar Arquivo com OCR Pipeline';
+
+          } else if (status === 'failed') {
+            clearInterval(uploadPollInterval);
+            document.getElementById('uploadProgressBar').style.display = 'none';
+            document.getElementById('uploadErrorBox').style.display    = 'block';
+            document.getElementById('uploadResErrorMsg').textContent   = data.error_message || 'Falha no processamento do arquivo.';
+            document.getElementById('btnUploadSubmit').disabled = false;
+            document.getElementById('btnUploadSubmit').innerHTML = '<i class="fa-solid fa-gears"></i> Processar Arquivo com OCR Pipeline';
+          }
+        } catch (e) { console.error(e); }
+      }, 1500);
+    }
+
+    function updateUploadStepState(status) {
+      document.getElementById('uploadStepPending').className    = 'step-item completed';
+      document.getElementById('uploadStepProcessing').className = 'step-item';
+      document.getElementById('uploadStepCompleted').className  = 'step-item';
+      if (status === 'processing') document.getElementById('uploadStepProcessing').className = 'step-item active';
+      else if (status === 'completed') {
+        document.getElementById('uploadStepProcessing').className = 'step-item completed';
+        document.getElementById('uploadStepCompleted').className  = 'step-item completed';
+      } else if (status === 'pending') {
+        document.getElementById('uploadStepPending').className = 'step-item active';
+      }
+    }
+
+    function copyUploadContent() {
+      navigator.clipboard.writeText(document.getElementById('uploadResContent').innerText);
+      const btn = event.currentTarget;
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> Copiado!';
+      setTimeout(() => btn.innerHTML = orig, 2000);
+    }
+
+    function exportUploadDoc(format) {
+      if (!uploadDocId) return;
+      const a = document.createElement('a');
+      a.href = `${API_BASE}/documents/${uploadDocId}/export?format=${format}`;
+      a.download = '';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
   </script>
+
 </body>
 </html>
