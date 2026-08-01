@@ -1024,9 +1024,9 @@
         </div>
 
         <!-- Breakdown Section Grid -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; margin-bottom: 1.25rem;">
           <!-- Status Distribution -->
-          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1.1rem;">
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1.1rem; min-width: 0;">
             <h3 style="font-size: 0.9rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.4rem;">
               <i class="fa-solid fa-bars-progress" style="color: var(--accent-primary);"></i> Distribuição por Status
             </h3>
@@ -1034,7 +1034,7 @@
           </div>
 
           <!-- Source Type Distribution -->
-          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1.1rem;">
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1.1rem; min-width: 0;">
             <h3 style="font-size: 0.9rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.4rem;">
               <i class="fa-solid fa-layer-group" style="color: var(--accent-emerald);"></i> Tipos de Origem / Fontes
             </h3>
@@ -1043,25 +1043,26 @@
         </div>
 
         <!-- Recent Log Sections -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem;">
           <!-- Recent Completed -->
-          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1.1rem;">
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1.1rem; min-width: 0; overflow: hidden;">
             <h3 style="font-size: 0.9rem; font-weight: 700; color: #34D399; margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.4rem;">
               <i class="fa-solid fa-circle-check"></i> Últimos Ingeridos
             </h3>
-            <div id="analyticsRecentCompleted">Sem registros</div>
+            <div id="analyticsRecentCompleted" style="min-width: 0;">Sem registros</div>
           </div>
           <!-- Recent Failures -->
-          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1.1rem;">
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1.1rem; min-width: 0; overflow: hidden;">
             <h3 style="font-size: 0.9rem; font-weight: 700; color: #F87171; margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.4rem;">
               <i class="fa-solid fa-triangle-exclamation"></i> Últimas Falhas
             </h3>
-            <div id="analyticsRecentFailed">Nenhuma falha recente</div>
+            <div id="analyticsRecentFailed" style="min-width: 0;">Nenhuma falha recente</div>
           </div>
         </div>
       </div>
     </div>
   </main>
+
 
   <script>
     const API_BASE = window.location.origin + '/api/v1';
@@ -1575,27 +1576,36 @@
         const recCompBox = document.getElementById('analyticsRecentCompleted');
         if (data.recent_completed && data.recent_completed.length > 0) {
           recCompBox.innerHTML = data.recent_completed.map(doc => `
-            <div style="font-size: 0.8rem; padding: 0.4rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between;">
-              <span style="color: var(--text-main); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;">${escapeHtml(doc.title)}</span>
-              <span style="color: var(--text-dim); font-size: 0.72rem;">${doc.source_type}</span>
+            <div style="padding: 0.45rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-width: 0;">
+              <span style="color: var(--text-main); font-weight: 500; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0;" title="${escapeHtml(doc.title)}">
+                ${escapeHtml(doc.title)}
+              </span>
+              <span style="font-size: 0.7rem; background: rgba(255,255,255,0.06); padding: 0.15rem 0.45rem; border-radius: 4px; color: var(--text-muted); font-family: var(--font-code); flex-shrink: 0; text-transform: uppercase;">
+                ${doc.source_type || 'web'}
+              </span>
             </div>
           `).join('');
         } else {
-          recCompBox.innerHTML = '<p style="font-size: 0.8rem; color: var(--text-dim);">Nenhum documento recente.</p>';
+          recCompBox.innerHTML = '<p style="font-size: 0.8rem; color: var(--text-dim); padding: 0.5rem 0;">Nenhum documento recente.</p>';
         }
 
         // Render Recent Failed
         const recFailBox = document.getElementById('analyticsRecentFailed');
         if (data.recent_failed && data.recent_failed.length > 0) {
           recFailBox.innerHTML = data.recent_failed.map(doc => `
-            <div style="font-size: 0.78rem; padding: 0.4rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-              <div style="color: #FCA5A5; font-weight: 600;">${escapeHtml(doc.title)}</div>
-              <div style="color: var(--text-dim); font-family: var(--font-code); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(doc.error_message)}</div>
+            <div style="padding: 0.45rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); min-width: 0; overflow: hidden;">
+              <div style="color: #FCA5A5; font-weight: 600; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(doc.title)}">
+                ${escapeHtml(doc.title)}
+              </div>
+              <div style="color: var(--text-dim); font-family: var(--font-code); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 0.1rem;" title="${escapeHtml(doc.error_message)}">
+                ${escapeHtml(doc.error_message)}
+              </div>
             </div>
           `).join('');
         } else {
-          recFailBox.innerHTML = '<p style="font-size: 0.8rem; color: var(--text-dim);">Nenhuma falha recente registrada.</p>';
+          recFailBox.innerHTML = '<p style="font-size: 0.8rem; color: var(--text-dim); padding: 0.5rem 0;">Nenhuma falha recente registrada.</p>';
         }
+
 
       } catch (err) {
         console.error('Failed to load analytics', err);
