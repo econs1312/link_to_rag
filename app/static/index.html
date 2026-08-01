@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Link-to-RAG Studio | Ingestão & Busca Vetorial</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    :root {
+      --bg-dark: #090D16;
+      --panel-bg: rgba(17, 24, 39, 0.7);
+      --panel-border: rgba(255, 255, 255, 0.08);
+      --panel-hover: rgba(255, 255, 255, 0.12);
+      
+      --accent-primary: #6366F1;
+      --accent-primary-hover: #4F46E5;
+      --accent-glow: rgba(99, 102, 241, 0.35);
+      
+      --accent-emerald: #10B981;
+      --accent-emerald-glow: rgba(16, 185, 129, 0.3);
+      
+      --text-main: #F3F4F6;
+      --text-muted: #9CA3AF;
+      --text-dim: #6B7280;
+      
+      --danger: #EF4444;
+      --warning: #F59E0B;
+      --info: #3B82F6;
+      
+      --font-heading: 'Outfit', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-code: 'Fira Code', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(16, 185, 129, 0.08) 0%, transparent 40%);
+      background-attachment: fixed;
+    }
+
+    /* Layout Header */
+    header {
+      background: rgba(9, 13, 22, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--panel-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 0.85rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent-primary), #8B5CF6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 1.25rem;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .brand-title {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 1.35rem;
+      background: linear-gradient(to right, #FFFFFF, #94A3B8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-badge {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.5rem;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: #A5B4FC;
+      border-radius: 6px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      color: #34D399;
+      padding: 0.4rem 0.85rem;
+      border-radius: 30px;
+      font-size: 0.825rem;
+      font-weight: 500;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--accent-emerald);
+      box-shadow: 0 0 10px var(--accent-emerald);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* Main Container & Tabs */
+    main {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 0.75rem;
+      background: rgba(17, 24, 39, 0.5);
+      padding: 0.4rem;
+      border-radius: 12px;
+      border: 1px solid var(--panel-border);
+      margin-bottom: 2rem;
+      width: fit-content;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.65rem 1.4rem;
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tab-btn.active {
+      background: var(--accent-primary);
+      color: white;
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    /* Tab Content Cards */
+    .tab-pane {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .tab-pane.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .glass-card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      margin-bottom: 2rem;
+    }
+
+    .card-title {
+      font-family: var(--font-heading);
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .card-subtitle {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* Form Controls */
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 1rem;
+      color: var(--text-dim);
+      font-size: 1rem;
+    }
+
+    input[type="text"], input[type="url"], select, textarea {
+      width: 100%;
+      background: rgba(10, 15, 26, 0.7);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 0.85rem 1rem 0.85rem 2.8rem;
+      color: var(--text-main);
+      font-family: var(--font-body);
+      font-size: 0.95rem;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    input[type="text"]:focus, input[type="url"]:focus, select:focus, textarea:focus {
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+      background: rgba(10, 15, 26, 0.9);
+    }
+
+    select {
+      appearance: none;
+      cursor: pointer;
+    }
+
+    .select-wrapper::after {
+      content: '\f078';
+      font-family: 'Font Awesome 6 Free';
+      font-weight: 900;
+      position: absolute;
+      right: 1rem;
+      color: var(--text-dim);
+      pointer-events: none;
+    }
+
+    .preset-links {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .preset-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--panel-border);
+      color: var(--text-muted);
+      padding: 0.3rem 0.7rem;
+      border-radius: 6px;
+      font-size: 0.775rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .preset-btn:hover {
+      background: rgba(99, 102, 241, 0.15);
+      color: #A5B4FC;
+      border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    /* Primary Buttons */
+    .btn-submit {
+      background: linear-gradient(135deg, var(--accent-primary), #4F46E5);
+      color: white;
+      border: none;
+      padding: 0.9rem 2rem;
+      border-radius: 10px;
+      font-family: var(--font-heading);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      box-shadow: 0 4px 20px var(--accent-glow);
+      transition: all 0.2s ease;
+    }
+
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(99, 102, 241, 0.5);
+    }
+
+    .btn-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Job Status Tracker Card */
+    .status-tracker {
+      margin-top: 1.5rem;
+      display: none;
+    }
+
+    .tracker-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--panel-border);
+      margin-bottom: 1rem;
+    }
+
+    .job-id-pill {
+      font-family: var(--font-code);
+      font-size: 0.8rem;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      color: #D1D5DB;
+    }
+
+    .steps-container {
+      display: flex;
+      justify-content: space-between;
+      position: relative;
+      margin: 1.5rem 0;
+    }
+
+    .steps-container::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 10%;
+      right: 10%;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.1);
+      z-index: 1;
+      transform: translateY(-50%);
+    }
+
+    .step-item {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .step-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #111827;
+      border: 2px solid var(--panel-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      transition: all 0.3s ease;
+    }
+
+    .step-item.completed .step-icon {
+      background: var(--accent-emerald);
+      border-color: var(--accent-emerald);
+      color: white;
+      box-shadow: 0 0 12px var(--accent-emerald-glow);
+    }
+
+    .step-item.active .step-icon {
+      background: var(--accent-primary);
+      border-color: var(--accent-primary);
+      color: white;
+      box-shadow: 0 0 12px var(--accent-glow);
+      animation: pulse 1.5s infinite;
+    }
+
+    .step-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .step-item.active .step-label {
+      color: #A5B4FC;
+    }
+
+    /* Result Preview Box */
+    .result-box {
+      background: rgba(10, 15, 26, 0.8);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      margin-top: 1rem;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .meta-item {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 0.75rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .meta-label {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .meta-value {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-main);
+      word-break: break-all;
+    }
+
+    /* Search Results List */
+    .search-results-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .search-card {
+      background: rgba(17, 24, 39, 0.6);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      transition: all 0.2s ease;
+    }
+
+    .search-card:hover {
+      border-color: rgba(99, 102, 241, 0.4);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-header-flex {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+      gap: 1rem;
+    }
+
+    .score-badge {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34D399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 0.3rem 0.65rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      font-family: var(--font-code);
+    }
+
+    .chunk-text-box {
+      background: rgba(9, 13, 22, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 1rem;
+      font-size: 0.875rem;
+      color: #D1D5DB;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      font-family: var(--font-body);
+    }
+
+    /* Slider styling */
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent-primary);
+    }
+
+    .slider-val {
+      font-family: var(--font-code);
+      font-weight: 700;
+      color: var(--accent-primary);
+      width: 30px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">
+        <i class="fa-solid fa-link"></i>
+      </div>
+      <div>
+        <span class="brand-title">Link-to-RAG</span>
+        <span class="brand-badge">Studio</span>
+      </div>
+    </div>
+
+    <div class="status-badge" id="apiStatusBadge">
+      <div class="status-dot"></div>
+      <span id="apiStatusText">Verificando API...</span>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main>
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('ingestTab')">
+        <i class="fa-solid fa-cloud-arrow-up"></i> Ingerir Link
+      </button>
+      <button class="tab-btn" onclick="switchTab('searchTab')">
+        <i class="fa-solid fa-magnifying-glass"></i> Busca Vetorial
+      </button>
+      <button class="tab-btn" onclick="switchTab('historyTab')">
+        <i class="fa-solid fa-list-check"></i> Histórico de Jobs
+      </button>
+    </div>
+
+    <!-- TAB 1: INGESTION -->
+    <div id="ingestTab" class="tab-pane active">
+      <div class="glass-card">
+        <h2 class="card-title">
+          <i class="fa-solid fa-paper-plane" style="color: var(--accent-primary);"></i>
+          Nova Ingestão de Conteúdo
+        </h2>
+        <p class="card-subtitle">Insira a URL de um artigo, vídeo do YouTube ou post de rede social para extração, limpeza e chunking vetorial.</p>
+
+        <form id="ingestForm" onsubmit="handleIngest(event)">
+          <div class="form-group">
+            <label for="urlInput">URL de Origem</label>
+            <div class="input-wrapper">
+              <i class="fa-solid fa-link input-icon"></i>
+              <input type="url" id="urlInput" placeholder="https://exemplo.com/artigo-ou-video" required>
+            </div>
+            <div class="preset-links">
+              <span style="font-size: 0.75rem; color: var(--text-dim); align-self: center;">Exemplos rápidos:</span>
+              <button type="button" class="preset-btn" onclick="setPreset('https://en.wikipedia.org/wiki/Retrieval-augmented_generation')">
+                <i class="fa-solid fa-globe"></i> Artigo RAG (Wiki)
+              </button>
+              <button type="button" class="preset-btn" onclick="setPreset('https://www.youtube.com/watch?v=dQw4w9WgXcQ')">
+                <i class="fa-brands fa-youtube" style="color: #EF4444;"></i> Vídeo YouTube
+              </button>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="sourceTypeSelect">Plataforma / Fonte (Opcional)</label>
+              <div class="input-wrapper select-wrapper">
+                <i class="fa-solid fa-filter input-icon"></i>
+                <select id="sourceTypeSelect">
+                  <option value="">Auto-Detectar (Recomendado)</option>
+                  <option value="web">Web General (Jina Reader)</option>
+                  <option value="youtube">YouTube (Transcrição)</option>
+                  <option value="social">Rede Social (Legenda/Post)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="categoryInput">Categoria / Categoria Tag (Metadado)</label>
+              <div class="input-wrapper">
+                <i class="fa-solid fa-tag input-icon"></i>
+                <input type="text" id="categoryInput" placeholder="ex: IA, Tecnologia, Tutorial">
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-submit" id="btnIngestSubmit">
+            <i class="fa-solid fa-bolt"></i> Iniciar Ingestão & RAG Pipeline
+          </button>
+        </form>
+
+        <!-- Status Tracker Progress -->
+        <div id="statusTracker" class="status-tracker">
+          <div class="tracker-header">
+            <div>
+              <span style="font-weight: 700;">Status da Ingestão</span>
+              <span class="job-id-pill" id="trackerJobId">Job ID: ...</span>
+            </div>
+            <span id="timerBadge" style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-code);">0.0s</span>
+          </div>
+
+          <div class="steps-container">
+            <div class="step-item" id="stepPending">
+              <div class="step-icon"><i class="fa-solid fa-clock"></i></div>
+              <span class="step-label">Na Fila</span>
+            </div>
+            <div class="step-item" id="stepProcessing">
+              <div class="step-icon"><i class="fa-solid fa-gears"></i></div>
+              <span class="step-label">Extração & Chunking</span>
+            </div>
+            <div class="step-item" id="stepCompleted">
+              <div class="step-icon"><i class="fa-solid fa-check"></i></div>
+              <span class="step-label">Vetorizado & Salvo</span>
+            </div>
+          </div>
+
+          <div id="jobResultBox" style="display: none;" class="result-box">
+            <h4 style="margin-bottom: 0.75rem; color: #34D399; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-circle-check"></i> Processamento Concluído!
+            </h4>
+            <div class="meta-grid">
+              <div class="meta-item">
+                <div class="meta-label">Título Extraído</div>
+                <div class="meta-value" id="resTitle">-</div>
+              </div>
+              <div class="meta-item">
+                <div class="meta-label">Autor / Fonte</div>
+                <div class="meta-value" id="resAuthor">-</div>
+              </div>
+              <div class="meta-item">
+                <div class="meta-label">Document ID</div>
+                <div class="meta-value" id="resDocId" style="font-family: var(--font-code); font-size: 0.8rem;">-</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="jobErrorBox" style="display: none;" class="result-box" style="border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);">
+            <h4 style="margin-bottom: 0.5rem; color: #F87171; font-size: 0.95rem;">
+              <i class="fa-solid fa-triangle-exclamation"></i> Falha na Ingestão
+            </h4>
+            <p id="resErrorMsg" style="font-size: 0.85rem; color: #FCA5A5; font-family: var(--font-code);"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: SEARCH -->
+    <div id="searchTab" class="tab-pane">
+      <div class="glass-card">
+        <h2 class="card-title">
+          <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--accent-emerald);"></i>
+          Busca Vetorial & Semântica
+        </h2>
+        <p class="card-subtitle">Busque por palavras-chave ou perguntas conceituais nos chunks de documentos indexados no PostgreSQL (pgvector).</p>
+
+        <form id="searchForm" onsubmit="handleSearch(event)">
+          <div class="form-group">
+            <label for="searchQueryInput">Consulta / Pergunta</label>
+            <div class="input-wrapper">
+              <i class="fa-solid fa-magnifying-glass input-icon"></i>
+              <input type="text" id="searchQueryInput" placeholder="ex: O que é Retrieval-Augmented Generation?" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Limite de Resultados (Top K)</label>
+            <div class="slider-container">
+              <input type="range" id="limitSlider" min="1" max="20" value="5" oninput="document.getElementById('limitVal').innerText = this.value">
+              <span class="slider-val" id="limitVal">5</span>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-submit" id="btnSearchSubmit" style="background: linear-gradient(135deg, var(--accent-emerald), #059669); box-shadow: 0 4px 20px var(--accent-emerald-glow);">
+            <i class="fa-solid fa-magnifying-glass"></i> Executar Busca Vetorial
+          </button>
+        </form>
+
+        <div id="searchResultsList" class="search-results-list"></div>
+      </div>
+    </div>
+
+    <!-- TAB 3: HISTORY -->
+    <div id="historyTab" class="tab-pane">
+      <div class="glass-card">
+        <h2 class="card-title">
+          <i class="fa-solid fa-clock-rotate-left" style="color: #F59E0B;"></i>
+          Histórico Local de Jobs
+        </h2>
+        <p class="card-subtitle">Acompanhe os jobs recentes processados nesta sessão.</p>
+
+        <div id="historyList">
+          <p style="color: var(--text-dim); text-align: center; padding: 2rem;">Nenhum job de ingestão executado ainda nesta sessão.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE = window.location.origin + '/api/v1';
+    let jobPollInterval = null;
+    let startTime = null;
+    let jobHistory = [];
+
+    // Health check on load
+    async function checkApiHealth() {
+      try {
+        const res = await fetch('/health');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('apiStatusBadge').style.borderColor = 'rgba(16, 185, 129, 0.4)';
+          document.getElementById('apiStatusText').innerText = `API Online (${data.environment})`;
+        } else {
+          throw new Error('API Offline');
+        }
+      } catch (err) {
+        document.getElementById('apiStatusBadge').style.background = 'rgba(239, 68, 68, 0.1)';
+        document.getElementById('apiStatusBadge').style.borderColor = 'rgba(239, 68, 68, 0.3)';
+        document.getElementById('apiStatusBadge').style.color = '#F87171';
+        document.getElementById('apiStatusText').innerText = 'API Desconectada';
+      }
+    }
+    checkApiHealth();
+
+    // Tab Switching Logic
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+
+      event.currentTarget.classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+    }
+
+    // Set Preset URLs
+    function setPreset(url) {
+      document.getElementById('urlInput').value = url;
+    }
+
+    // Handle Ingest Form Submit
+    async function handleIngest(e) {
+      e.preventDefault();
+      const url = document.getElementById('urlInput').value;
+      const sourceType = document.getElementById('sourceTypeSelect').value || null;
+      const category = document.getElementById('categoryInput').value || null;
+
+      const payload = {
+        url: url,
+        source_type: sourceType,
+        metadata: category ? { category: category } : {}
+      };
+
+      const btn = document.getElementById('btnIngestSubmit');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enfileirando Job...';
+
+      try {
+        const res = await fetch(`${API_BASE}/ingest`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.message || 'Erro ao enfileirar job');
+        }
+
+        const data = await res.json();
+        const jobId = data.job_id;
+
+        // Show status tracker
+        document.getElementById('statusTracker').style.display = 'block';
+        document.getElementById('trackerJobId').innerText = `Job ID: ${jobId.substring(0, 8)}...`;
+        document.getElementById('jobResultBox').style.display = 'none';
+        document.getElementById('jobErrorBox').style.display = 'none';
+
+        // Add to local history
+        jobHistory.unshift({ id: jobId, url: url, created_at: new Date().toLocaleTimeString() });
+        renderHistory();
+
+        // Start polling
+        startJobPolling(jobId);
+
+      } catch (err) {
+        alert('Erro: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Iniciar Ingestão & RAG Pipeline';
+      }
+    }
+
+    // Poll Job Status
+    function startJobPolling(jobId) {
+      if (jobPollInterval) clearInterval(jobPollInterval);
+      startTime = Date.now();
+
+      updateStepState('pending');
+
+      jobPollInterval = setInterval(async () => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        document.getElementById('timerBadge').innerText = `${elapsed}s`;
+
+        try {
+          const res = await fetch(`${API_BASE}/jobs/${jobId}`);
+          if (!res.ok) return;
+
+          const data = await res.json();
+          const status = data.status.toLowerCase();
+
+          updateStepState(status);
+
+          if (status === 'completed') {
+            clearInterval(jobPollInterval);
+            document.getElementById('jobResultBox').style.display = 'block';
+            document.getElementById('resTitle').innerText = data.title || 'Untitled';
+            document.getElementById('resAuthor').innerText = data.author || 'Desconhecido';
+            document.getElementById('resDocId').innerText = data.document_id || data.job_id;
+          } else if (status === 'failed') {
+            clearInterval(jobPollInterval);
+            document.getElementById('jobErrorBox').style.display = 'block';
+            document.getElementById('resErrorMsg').innerText = data.error_message || 'Falha durante o processamento do link';
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      }, 1500);
+    }
+
+    function updateStepState(status) {
+      const stepPending = document.getElementById('stepPending');
+      const stepProcessing = document.getElementById('stepProcessing');
+      const stepCompleted = document.getElementById('stepCompleted');
+
+      stepPending.className = 'step-item completed';
+      stepProcessing.className = 'step-item';
+      stepCompleted.className = 'step-item';
+
+      if (status === 'processing') {
+        stepProcessing.className = 'step-item active';
+      } else if (status === 'completed') {
+        stepProcessing.className = 'step-item completed';
+        stepCompleted.className = 'step-item completed';
+      } else if (status === 'pending') {
+        stepPending.className = 'step-item active';
+      }
+    }
+
+    // Handle Search Form Submit
+    async function handleSearch(e) {
+      e.preventDefault();
+      const query = document.getElementById('searchQueryInput').value;
+      const limit = parseInt(document.getElementById('limitSlider').value);
+
+      const btn = document.getElementById('btnSearchSubmit');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Pesquisando no Vector DB...';
+
+      const resultsContainer = document.getElementById('searchResultsList');
+      resultsContainer.innerHTML = '';
+
+      try {
+        const res = await fetch(`${API_BASE}/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: query, limit: limit })
+        });
+
+        if (!res.ok) {
+          throw new Error('Falha ao executar busca vetorial');
+        }
+
+        const data = await res.json();
+        
+        if (data.results.length === 0) {
+          resultsContainer.innerHTML = '<p style="color: var(--text-dim); text-align: center; padding: 2rem;">Nenhum fragmento encontrado para esta busca.</p>';
+          return;
+        }
+
+        data.results.forEach((item, index) => {
+          const scorePct = (item.score * 100).toFixed(1);
+          const card = document.createElement('div');
+          card.className = 'search-card';
+          card.innerHTML = `
+            <div class="card-header-flex">
+              <div>
+                <h4 style="color: var(--text-main); font-size: 1rem; margin-bottom: 0.2rem;">
+                  #${index + 1} - ${item.title || 'Documento Indexado'}
+                </h4>
+                <a href="${item.source_url || '#'}" target="_blank" style="color: #A5B4FC; font-size: 0.8rem; text-decoration: none;">
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i> ${item.source_url || 'N/A'}
+                </a>
+              </div>
+              <span class="score-badge">${scorePct}% Match</span>
+            </div>
+            <div class="chunk-text-box">${escapeHtml(item.chunk_text)}</div>
+          `;
+          resultsContainer.appendChild(card);
+        });
+
+      } catch (err) {
+        resultsContainer.innerHTML = `<p style="color: #F87171; text-align: center; padding: 1rem;">Erro: ${err.message}</p>`;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Executar Busca Vetorial';
+      }
+    }
+
+    function renderHistory() {
+      const container = document.getElementById('historyList');
+      if (jobHistory.length === 0) return;
+
+      container.innerHTML = jobHistory.map(job => `
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--panel-border); padding: 0.85rem 1rem; border-radius: 8px; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <span class="job-id-pill">${job.id.substring(0, 8)}...</span>
+            <span style="font-size: 0.85rem; margin-left: 0.5rem; color: var(--text-muted);">${job.url}</span>
+          </div>
+          <button class="preset-btn" onclick="startJobPolling('${job.id}'); switchTab('ingestTab');">
+            <i class="fa-solid fa-eye"></i> Inspecionar
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function escapeHtml(text) {
+      return text ? text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
+    }
+  </script>
+</body>
+</html>

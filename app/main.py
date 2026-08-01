@@ -66,6 +66,25 @@ app.include_router(jobs_router, prefix="/api/v1", tags=["Jobs"])
 app.include_router(search_router, prefix="/api/v1", tags=["Search"])
 
 
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# Mount static directory
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+@app.get("/", include_in_schema=False)
+@app.get("/ui", include_in_schema=False)
+async def serve_ui():
+    index_path = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"message": "Link-to-RAG API is running"}
+
+
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {
@@ -73,3 +92,4 @@ async def health_check():
         "app_name": settings.APP_NAME,
         "environment": settings.ENVIRONMENT,
     }
+

@@ -37,6 +37,8 @@ services:
     restart: always
     ports:
       - "8000:8000"
+    volumes:
+      - ./:/app
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/link_to_rag
       - REDIS_URL=redis://redis:6379/0
@@ -54,6 +56,8 @@ services:
     build: .
     container_name: link_to_rag_worker
     restart: always
+    volumes:
+      - ./:/app
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/link_to_rag
       - REDIS_URL=redis://redis:6379/0
