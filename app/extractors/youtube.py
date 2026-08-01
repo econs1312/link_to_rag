@@ -21,6 +21,23 @@ class YouTubeExtractor(BaseExtractor):
         match = cls.YOUTUBE_REGEX.search(url)
         return match.group(1) if match else None
 
+    def _fetch_transcript_sync(self, video_id: str) -> list[str]:
+        api = YouTubeTranscriptApi()
+        try:
+            if hasattr(api, "fetch"):
+                snippets = api.fetch(video_id, languages=["pt", "en", "es"])
+                return [s.text if hasattr(s, "text") else s.get("text", "") for s in snippets]
+            elif hasattr(YouTubeTranscriptApi, "get_transcript"):
+                snippets = YouTubeTranscriptApi.get_transcript(video_id, languages=["pt", "en", "es"])
+                return [s.get("text", "") if isinstance(s, dict) else getattr(s, "text", "") for s in snippets]
+            else:
+                snippets = api.fetch(video_id)
+                return [s.text if hasattr(s, "text") else s.get("text", "") for s in snippets]
+        except Exception:
+            # Fallback to fetch without language constraint if language matching fails
+            snippets = api.fetch(video_id)
+            return [s.text if hasattr(s, "text") else s.get("text", "") for s in snippets]
+
     async def extract(self, url: str) -> ExtractedContent:
         self.validate_url_access(url)
         video_id = self.extract_video_id(url)
@@ -31,13 +48,12 @@ class YouTubeExtractor(BaseExtractor):
         logger.info("Extracting YouTube video transcript", video_id=video_id, target_url=url)
 
         try:
-            # Try fetching manual/auto transcript in parallel or sync executor
             loop = asyncio.get_event_loop()
-            transcript_list = await loop.run_in_executor(
-                None, lambda: YouTubeTranscriptApi.get_transcript(video_id, languages=["pt", "en", "es"])
+            transcript_texts = await loop.run_in_executor(
+                None, lambda: self._fetch_transcript_sync(video_id)
             )
 
-            full_text = "\n".join([item["text"] for item in transcript_list])
+            full_text = "\n".join(transcript_texts)
             self.record_success(url)
 
             return ExtractedContent(
