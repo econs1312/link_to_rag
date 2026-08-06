@@ -12,6 +12,8 @@ Flow:
 import uuid
 from typing import Optional
 
+import structlog
+
 from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +29,7 @@ from app.models.document import DocumentChunk
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, HTTPException, status, Request
 from app.core.security import verify_api_key, extract_tenant_id
+from app.core.rate_limiter import rate_limiter
 
 router = APIRouter()
 
@@ -56,6 +59,7 @@ async def upload_file(
     category: Optional[str] = Form(None, description="Optional metadata category tag"),
     webhook_url: Optional[str] = Form(None, description="Optional webhook URL for job completion notification"),
     api_key: Optional[str] = Depends(verify_api_key),
+    _rl: None = Depends(rate_limiter),
 ):
     tenant_id = extract_tenant_id(request)
 
@@ -124,6 +128,7 @@ async def upload_file(
     background_tasks.add_task(
         _process_file_upload,
         job_id=job_id,
+        correlation_id=correlation_id,
         file_bytes=file_bytes,
         filename=filename,
         content_type=file.content_type,
@@ -140,6 +145,7 @@ async def upload_file(
 
 async def _process_file_upload(
     job_id: str,
+    correlation_id: str,
     file_bytes: bytes,
     filename: str,
     content_type: Optional[str],
@@ -150,7 +156,9 @@ async def _process_file_upload(
     from app.models.document import Document, DocumentChunk, IngestionStatus
     from sqlalchemy import select
 
-    log = logger.bind(job_id=job_id, filename=filename)
+    # Re-bind trace_id for this background task (middleware already cleared contextvars)
+    structlog.contextvars.bind_contextvars(trace_id=correlation_id)
+    log = logger.bind(job_id=job_id, filename=filename, correlation_id=correlation_id)
 
     async with AsyncSessionLocal() as db:
         try:
@@ -180,9 +188,13 @@ async def _process_file_upload(
             cleaned_text = TextCleanerService.clean_text(extracted.raw_text)
             doc.cleaned_markdown = TextCleanerService.format_with_frontmatter(extracted, cleaned_text)
 
-            # Chunk
+            # Chunk (Semantic + Metadata Injection)
             chunker = ChunkingService()
-            chunks_data = chunker.create_chunks(doc.cleaned_markdown)
+            chunks_data = chunker.create_chunks(
+                doc.cleaned_markdown,
+                document_title=doc.title or filename,
+                document_author=doc.author or "Arquivo Local",
+            )
             log.info("File content chunked", num_chunks=len(chunks_data))
 
             # Embed

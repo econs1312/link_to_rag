@@ -1,16 +1,65 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+"""
+Jobs & Documents API — Status polling, export, and deletion.
+
+Multi-tenancy (skill 09 §3):
+  - All read/delete operations validate tenant_id ownership.
+  - If tenant_id doesn't match, returns 404 (not 403) to avoid revealing resource existence.
+  - In dev mode (no API_KEYS / no tenant_id), tenant filtering is skipped for convenience.
+"""
+
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.responses import PlainTextResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Literal
+
 from app.db.session import get_db
 from app.models.document import Document
 from app.schemas.ingestion import JobStatusResponse, DeleteResponse
 from app.core.exceptions import NotFoundError
 from app.core.logging import logger
+from app.core.security import verify_api_key, extract_tenant_id
 
 router = APIRouter()
 
+
+# ── Tenant-aware query helper ────────────────────────────────────────────────
+
+async def _get_document_with_tenant_check(
+    doc_id: str,
+    request: Request,
+    db: AsyncSession,
+    resource_label: str = "Document",
+) -> Document:
+    """
+    Fetch a document by ID with tenant isolation (skill 09 §3).
+
+    If tenant_id is present in the request, the query also filters by it.
+    Returns 404 if not found OR if tenant doesn't match (to avoid revealing existence).
+    """
+    tenant_id = extract_tenant_id(request)
+
+    stmt = select(Document).where(Document.id == doc_id)
+
+    # Apply tenant filter when tenant_id is present
+    if tenant_id:
+        stmt = stmt.where(Document.metadata_info["tenant_id"].astext == tenant_id)
+
+    res = await db.execute(stmt)
+    doc = res.scalar_one_or_none()
+
+    if not doc:
+        raise NotFoundError(
+            message=f"{resource_label} with ID '{doc_id}' not found",
+            details={resource_label.lower() + "_id": doc_id},
+        )
+
+    return doc
+
+
+# ── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.get(
     "/jobs/{job_id}",
@@ -19,17 +68,11 @@ router = APIRouter()
 )
 async def get_job_status(
     job_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
+    api_key: Optional[str] = Depends(verify_api_key),
 ):
-    stmt = select(Document).where(Document.id == job_id)
-    res = await db.execute(stmt)
-    doc = res.scalar_one_or_none()
-
-    if not doc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Job with ID '{job_id}' not found",
-        )
+    doc = await _get_document_with_tenant_check(job_id, request, db, resource_label="Job")
 
     return JobStatusResponse(
         job_id=doc.id,
@@ -57,8 +100,10 @@ async def get_job_status(
 )
 async def export_document(
     doc_id: str,
+    request: Request,
     format: Literal["md", "txt", "json"] = Query(default="md", description="Export format: md (Markdown), txt (plain text), json (full metadata + content)"),
     db: AsyncSession = Depends(get_db),
+    api_key: Optional[str] = Depends(verify_api_key),
 ):
     """Download the extracted and cleaned content of an ingested document.
 
@@ -66,12 +111,7 @@ async def export_document(
     - **txt**: Returns plain text (frontmatter stripped)
     - **json**: Returns full document metadata + content as JSON
     """
-    stmt = select(Document).where(Document.id == doc_id)
-    res = await db.execute(stmt)
-    doc = res.scalar_one_or_none()
-
-    if not doc:
-        raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
+    doc = await _get_document_with_tenant_check(doc_id, request, db, resource_label="Document")
 
     if doc.status.value not in ("completed",):
         raise HTTPException(
@@ -126,18 +166,12 @@ async def export_document(
 )
 async def delete_document(
     document_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
+    api_key: Optional[str] = Depends(verify_api_key),
 ):
     """Remove a document and cascade-delete all associated chunks and embeddings."""
-    stmt = select(Document).where(Document.id == document_id)
-    res = await db.execute(stmt)
-    doc = res.scalar_one_or_none()
-
-    if not doc:
-        raise NotFoundError(
-            message=f"Document with ID '{document_id}' not found",
-            details={"document_id": document_id},
-        )
+    doc = await _get_document_with_tenant_check(document_id, request, db, resource_label="Document")
 
     logger.info("Deleting document and associated chunks", document_id=document_id)
     await db.delete(doc)
@@ -160,18 +194,12 @@ async def delete_document(
 )
 async def delete_job(
     job_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
+    api_key: Optional[str] = Depends(verify_api_key),
 ):
     """Remove a job record and cascade-delete all associated chunks and embeddings."""
-    stmt = select(Document).where(Document.id == job_id)
-    res = await db.execute(stmt)
-    doc = res.scalar_one_or_none()
-
-    if not doc:
-        raise NotFoundError(
-            message=f"Job with ID '{job_id}' not found",
-            details={"job_id": job_id},
-        )
+    doc = await _get_document_with_tenant_check(job_id, request, db, resource_label="Job")
 
     logger.info("Deleting job and associated data", job_id=job_id)
     await db.delete(doc)
@@ -181,5 +209,3 @@ async def delete_job(
         message="Job and all associated data deleted successfully",
         deleted_id=job_id,
     )
-
-

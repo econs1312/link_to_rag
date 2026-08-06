@@ -60,8 +60,12 @@ class IngestionPipelineService:
             cleaned_text = TextCleanerService.clean_text(extracted_content.raw_text)
             doc.cleaned_markdown = TextCleanerService.format_with_frontmatter(extracted_content, cleaned_text)
 
-            # 4. Chunking
-            chunks_data = self.chunker.create_chunks(doc.cleaned_markdown)
+            # 4. Chunking (Semantic + Metadata Injection)
+            chunks_data = self.chunker.create_chunks(
+                doc.cleaned_markdown,
+                document_title=doc.title or "Untitled",
+                document_author=doc.author or "Unknown",
+            )
             log.info("Created text chunks", num_chunks=len(chunks_data))
 
             # 5. Embeddings

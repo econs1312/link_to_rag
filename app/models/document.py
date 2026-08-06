@@ -12,6 +12,7 @@ from sqlalchemy import (
     JSON,
     Index,
 )
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from app.db.session import Base
@@ -62,16 +63,24 @@ class DocumentChunk(Base):
     chunk_index = Column(Integer, nullable=False)
     chunk_text = Column(Text, nullable=False)
     embedding = Column(Vector(settings.EMBEDDING_DIMENSION), nullable=True)
+    search_vector = Column(TSVECTOR, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     document = relationship("Document", back_populates="chunks")
 
 
-# Index for pgvector cosine similarity search and fulltext search
+# Index for pgvector cosine similarity search
 Index(
     "idx_document_chunks_embedding",
     DocumentChunk.embedding,
     postgresql_using="hnsw",
     postgresql_with={"m": 16, "ef_construction": 64},
     postgresql_ops={"embedding": "vector_cosine_ops"},
+)
+
+# GIN index for full-text search on search_vector
+Index(
+    "idx_document_chunks_search_vector",
+    DocumentChunk.search_vector,
+    postgresql_using="gin",
 )

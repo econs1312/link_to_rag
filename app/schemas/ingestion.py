@@ -1,6 +1,34 @@
-from pydantic import BaseModel, HttpUrl, Field, ConfigDict
-from typing import Optional, Dict, Any, List
+from pydantic import BaseModel, HttpUrl, Field, ConfigDict, field_validator
+from typing import Optional, Dict, Any, List, Literal
 from datetime import datetime
+import ipaddress
+import socket
+
+
+# Hostnames that are always blocked regardless of DNS resolution
+_BLOCKED_HOSTNAMES = {"localhost", "0.0.0.0", "[::]", "[::1]"}
+
+
+def _is_ssrf_target(hostname: str) -> bool:
+    """Check if a hostname resolves to a private/reserved IP address (SSRF protection)."""
+    # Block well-known local hostnames
+    normalized = hostname.lower().strip(".")
+    if normalized in _BLOCKED_HOSTNAMES or normalized.endswith(".local"):
+        return True
+
+    try:
+        # Resolve hostname to IP(s) — checks the *actual* IP, not just the hostname string
+        addr_infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for family, _, _, _, sockaddr in addr_infos:
+            ip_str = sockaddr[0]
+            ip = ipaddress.ip_address(ip_str)
+            if ip.is_private or ip.is_reserved or ip.is_loopback or ip.is_link_local:
+                return True
+    except (socket.gaierror, ValueError):
+        # DNS resolution failed — block by default (fail-closed)
+        return True
+
+    return False
 
 
 class IngestRequest(BaseModel):
@@ -12,6 +40,21 @@ class IngestRequest(BaseModel):
         description="Optional webhook URL to receive a POST notification when the job completes or fails. Useful for integration with n8n, Make.com, Zapier, etc.",
     )
 
+    @field_validator("url")
+    @classmethod
+    def block_ssrf_urls(cls, v: HttpUrl) -> HttpUrl:
+        """Reject URLs pointing to private/local network addresses to prevent SSRF attacks."""
+        hostname = v.host
+        if not hostname:
+            raise ValueError("URL must contain a valid hostname.")
+
+        if _is_ssrf_target(hostname):
+            raise ValueError(
+                f"URL com host '{hostname}' bloqueada: endereços privados/locais não são permitidos "
+                f"(127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, localhost, etc.)."
+            )
+
+        return v
 
 
 class IngestResponse(BaseModel):
@@ -49,6 +92,11 @@ class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Search query string")
     limit: int = Field(default=5, ge=1, le=50, description="Max number of chunk results to return")
     filter_metadata: Optional[Dict[str, Any]] = Field(None, description="Optional metadata filter dictionary")
+    search_mode: Literal["hybrid", "vector", "fulltext"] = Field(
+        default="hybrid",
+        description="Search strategy: 'hybrid' (vector + fulltext + RRF), 'vector' (cosine only), 'fulltext' (tsvector only)",
+    )
+    rrf_k: int = Field(default=60, ge=1, le=1000, description="RRF constant k (default 60). Higher values reduce the influence of rank position.")
 
 
 class SearchResultItem(BaseModel):
@@ -64,6 +112,7 @@ class SearchResultItem(BaseModel):
 
 class SearchResponse(BaseModel):
     query: str
+    search_mode: str = Field(default="hybrid", description="Search mode used for this query")
     total_results: int
     results: List[SearchResultItem]
 

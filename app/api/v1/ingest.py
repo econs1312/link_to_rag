@@ -12,6 +12,7 @@ from app.schemas.ingestion import IngestRequest, IngestResponse
 from app.core.config import settings
 from app.core.logging import logger
 from app.core.security import verify_api_key, extract_tenant_id
+from app.core.rate_limiter import rate_limiter
 from app.services.ingestion_pipeline import IngestionPipelineService
 
 router = APIRouter()
@@ -41,6 +42,7 @@ async def enqueue_ingestion(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     api_key: Optional[str] = Depends(verify_api_key),
+    _rl: None = Depends(rate_limiter),
 ):
     # Use trace_id from the TraceIDMiddleware (bound in structlog contextvars)
     ctx_vars = structlog.contextvars.get_contextvars()

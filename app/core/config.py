@@ -36,5 +36,12 @@ class Settings(BaseSettings):
     CIRCUIT_BREAKER_FAILURES: int = 5
     CIRCUIT_BREAKER_COOLDOWN_SECONDS: int = 900  # 15 minutes
 
+    # yt-dlp download timeout (seconds)
+    YTDLP_TIMEOUT: int = 300
+
+    # Rate Limiting Settings
+    RATE_LIMIT_MAX: int = 50          # Max requests per window
+    RATE_LIMIT_WINDOW_SECONDS: int = 60  # Window duration in seconds
+
 
 settings = Settings()

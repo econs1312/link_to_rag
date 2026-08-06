@@ -37,7 +37,7 @@ class AudioTranscriberService:
                     ],
                     capture_output=True,
                     text=True,
-                    timeout=45,
+                    timeout=settings.YTDLP_TIMEOUT,
                 )
                 if res.returncode == 0:
                     files = [

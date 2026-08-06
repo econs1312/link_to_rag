@@ -1,12 +1,22 @@
-﻿"""
+"""
 File Extractor: handles PDF, DOCX, and image files (with OCR).
 
+Security & Validation (skill 10):
+  - Uses python-magic to verify real MIME type via magic bytes (not extension).
+  - Rejects files whose real content doesn't match supported types.
+
 Extraction strategy:
-- PDF:    pymupdf (fitz) for native text extraction.
-          Falls back to Tesseract OCR page-by-page when a page has no text layer.
-- DOCX:   python-docx for structured paragraph + table extraction.
-- Images: OpenAI Vision API (if OPENAI_API_KEY configured) for best accuracy,
-          then falls back to Tesseract OCR for local processing.
+  - PDF:    pymupdf (fitz) for native text extraction.
+            Falls back to Tesseract OCR page-by-page when a page has < 100 chars
+            of native text (scanned PDF detection per skill 10 §3).
+  - DOCX:   python-docx for structured paragraph + table extraction.
+  - Images: OpenAI Vision API (if OPENAI_API_KEY configured) for best accuracy,
+            then falls back to Tesseract OCR for local processing.
+
+Memory safety (skill 10 §4):
+  - All temp files cleaned in try...finally blocks.
+  - Pixmaps explicitly freed after OCR render.
+  - PIL Images use context managers.
 """
 
 import io
@@ -52,6 +62,9 @@ SUPPORTED_EXTENSIONS = {
     ".webp": "image",
 }
 
+# Minimum characters per PDF page to consider native text valid (skill 10 §3)
+_OCR_FALLBACK_THRESHOLD = 100
+
 
 def detect_file_type(filename: str, content_type: Optional[str] = None) -> Optional[str]:
     """Detect file type from MIME type or file extension."""
@@ -59,6 +72,60 @@ def detect_file_type(filename: str, content_type: Optional[str] = None) -> Optio
         return SUPPORTED_MIME_TYPES[content_type]
     ext = os.path.splitext(filename.lower())[1]
     return SUPPORTED_EXTENSIONS.get(ext)
+
+
+def validate_real_mime_type(file_bytes: bytes, filename: str) -> str:
+    """
+    Verify real file type using magic bytes (skill 10 §1).
+
+    Returns the resolved file type string ('pdf', 'docx', 'image').
+    Raises ValueError if the file type is not supported or is suspicious.
+    """
+    try:
+        import magic
+        real_mime = magic.from_buffer(file_bytes, mime=True)
+    except ImportError:
+        logger.warning(
+            "python-magic not available, falling back to extension-based detection",
+            filename=filename,
+        )
+        file_type = detect_file_type(filename)
+        if not file_type:
+            raise ValueError(f"Unsupported file type: '{filename}'")
+        return file_type
+    except Exception as exc:
+        logger.warning(
+            "Magic bytes detection failed, falling back to extension",
+            filename=filename,
+            error=str(exc),
+        )
+        file_type = detect_file_type(filename)
+        if not file_type:
+            raise ValueError(f"Unsupported file type: '{filename}'")
+        return file_type
+
+    # Map real MIME to our file type
+    resolved_type = SUPPORTED_MIME_TYPES.get(real_mime)
+    if not resolved_type:
+        raise ValueError(
+            f"Ficheiro rejeitado: o tipo real do ficheiro é '{real_mime}' "
+            f"(detectado por magic bytes), que não é suportado. "
+            f"Ficheiro: '{filename}'. "
+            f"Tipos suportados: PDF, DOCX, PNG, JPG, TIFF, BMP, GIF, WEBP."
+        )
+
+    # Log warning if declared type differs from real type
+    declared_type = detect_file_type(filename)
+    if declared_type and declared_type != resolved_type:
+        logger.warning(
+            "File real MIME type differs from declared extension",
+            filename=filename,
+            declared_type=declared_type,
+            real_mime=real_mime,
+            resolved_type=resolved_type,
+        )
+
+    return resolved_type
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -71,15 +138,11 @@ async def extract_file_content(
     content_type: Optional[str] = None,
 ) -> ExtractedContent:
     """
-    Entry point: dispatches extraction based on detected file type.
+    Entry point: validates real MIME type, then dispatches extraction.
     Returns ExtractedContent compatible with the existing ingestion pipeline.
     """
-    file_type = detect_file_type(filename, content_type)
-    if not file_type:
-        raise ValueError(
-            f"Unsupported file type: '{filename}' (content_type={content_type}). "
-            f"Supported: PDF, DOCX, PNG, JPG, JPEG, TIFF, BMP, GIF, WEBP"
-        )
+    # 1. Validate real MIME type using magic bytes (skill 10 §1)
+    file_type = validate_real_mime_type(file_bytes, filename)
 
     logger.info("File extraction dispatched", filename=filename, file_type=file_type)
 
@@ -113,14 +176,19 @@ async def extract_file_content(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _extract_pdf(file_bytes: bytes, filename: str) -> tuple[str, dict]:
-    """Extract text from PDF using pymupdf. Falls back to Tesseract OCR for image-only pages."""
+    """
+    Extract text from PDF using pymupdf (skill 10 §2).
+    Falls back to Tesseract OCR for pages with < 100 chars of native text (skill 10 §3).
+    """
     import fitz  # pymupdf
 
     pages_text: list[str] = []
     ocr_pages = 0
     native_pages = 0
 
-    with fitz.open(stream=file_bytes, filetype="pdf") as doc:
+    doc = None
+    try:
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
         title = doc.metadata.get("title") or filename
         author = doc.metadata.get("author") or "PDF Document"
         num_pages = len(doc)
@@ -128,19 +196,35 @@ def _extract_pdf(file_bytes: bytes, filename: str) -> tuple[str, dict]:
         for page_num, page in enumerate(doc, start=1):
             native_text = page.get_text().strip()
 
-            if native_text and len(native_text) > 20:
-                # Page has a proper text layer
+            if native_text and len(native_text) > _OCR_FALLBACK_THRESHOLD:
+                # Page has a proper text layer (skill 10 §3: > 100 chars)
                 pages_text.append(f"\n## Página {page_num}\n\n{native_text}")
                 native_pages += 1
             else:
-                # Image-only page — render and OCR
-                logger.debug("PDF page has no text layer, applying Tesseract OCR", page=page_num, filename=filename)
-                pix = page.get_pixmap(dpi=200)
-                img_bytes = pix.tobytes("png")
-                ocr_text = _tesseract_ocr_from_bytes(img_bytes)
-                if ocr_text.strip():
-                    pages_text.append(f"\n## Página {page_num} (OCR)\n\n{ocr_text}")
-                    ocr_pages += 1
+                # Image-only or sparse page — render to image and OCR (skill 10 §3)
+                logger.debug(
+                    "PDF page has insufficient text, applying Tesseract OCR",
+                    page=page_num,
+                    filename=filename,
+                    native_chars=len(native_text) if native_text else 0,
+                )
+                pix = None
+                try:
+                    pix = page.get_pixmap(dpi=200)
+                    img_bytes = pix.tobytes("png")
+                    ocr_text = _tesseract_ocr_from_bytes(img_bytes)
+                    if ocr_text.strip():
+                        pages_text.append(f"\n## Página {page_num} (OCR)\n\n{ocr_text}")
+                        ocr_pages += 1
+                finally:
+                    # Explicitly free pixmap memory (skill 10 §4)
+                    if pix is not None:
+                        pix = None  # noqa: F841 — release reference for GC
+
+    finally:
+        # Ensure document handle is always closed (skill 10 §4)
+        if doc is not None:
+            doc.close()
 
     full_text = "\n".join(pages_text)
     return full_text, {
@@ -161,11 +245,12 @@ def _extract_docx(file_bytes: bytes, filename: str) -> tuple[str, dict]:
     """Extract text from DOCX using python-docx, including paragraphs and tables."""
     from docx import Document as DocxDocument
 
-    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
-        tmp.write(file_bytes)
-        tmp_path = tmp.name
-
+    tmp_path = None
     try:
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
+            tmp.write(file_bytes)
+            tmp_path = tmp.name
+
         doc = DocxDocument(tmp_path)
         parts: list[str] = []
 
@@ -209,7 +294,9 @@ def _extract_docx(file_bytes: bytes, filename: str) -> tuple[str, dict]:
             "extraction_method": "python-docx",
         }
     finally:
-        os.unlink(tmp_path)
+        # Always clean up temp file (skill 10 §4)
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -291,10 +378,11 @@ def _tesseract_ocr_from_bytes(image_bytes: bytes) -> str:
         import pytesseract
         from PIL import Image
 
-        image = Image.open(io.BytesIO(image_bytes))
-        # Use Portuguese + English for best coverage
-        text = pytesseract.image_to_string(image, lang="por+eng", config="--oem 3 --psm 6")
-        return text.strip()
+        # Use context manager for PIL Image (skill 10 §4)
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            # Use Portuguese + English for best coverage
+            text = pytesseract.image_to_string(image, lang="por+eng", config="--oem 3 --psm 6")
+            return text.strip()
     except Exception as exc:
         logger.error("Tesseract OCR failed", error=str(exc))
         return ""
