@@ -5,7 +5,9 @@ from sqlalchemy import select
 from typing import Literal
 from app.db.session import get_db
 from app.models.document import Document
-from app.schemas.ingestion import JobStatusResponse
+from app.schemas.ingestion import JobStatusResponse, DeleteResponse
+from app.core.exceptions import NotFoundError
+from app.core.logging import logger
 
 router = APIRouter()
 
@@ -111,4 +113,73 @@ async def export_document(
         media_type="text/markdown",
         headers={"Content-Disposition": f'attachment; filename="{safe_title}.md"'},
     )
+
+
+@router.delete(
+    "/documents/{document_id}",
+    response_model=DeleteResponse,
+    summary="Delete a document and all its chunks/vectors",
+    responses={
+        200: {"description": "Document successfully deleted"},
+        404: {"description": "Document not found"},
+    },
+)
+async def delete_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove a document and cascade-delete all associated chunks and embeddings."""
+    stmt = select(Document).where(Document.id == document_id)
+    res = await db.execute(stmt)
+    doc = res.scalar_one_or_none()
+
+    if not doc:
+        raise NotFoundError(
+            message=f"Document with ID '{document_id}' not found",
+            details={"document_id": document_id},
+        )
+
+    logger.info("Deleting document and associated chunks", document_id=document_id)
+    await db.delete(doc)
+    await db.commit()
+
+    return DeleteResponse(
+        message="Document and all associated chunks deleted successfully",
+        deleted_id=document_id,
+    )
+
+
+@router.delete(
+    "/jobs/{job_id}",
+    response_model=DeleteResponse,
+    summary="Delete a job and all its associated data",
+    responses={
+        200: {"description": "Job successfully deleted"},
+        404: {"description": "Job not found"},
+    },
+)
+async def delete_job(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove a job record and cascade-delete all associated chunks and embeddings."""
+    stmt = select(Document).where(Document.id == job_id)
+    res = await db.execute(stmt)
+    doc = res.scalar_one_or_none()
+
+    if not doc:
+        raise NotFoundError(
+            message=f"Job with ID '{job_id}' not found",
+            details={"job_id": job_id},
+        )
+
+    logger.info("Deleting job and associated data", job_id=job_id)
+    await db.delete(doc)
+    await db.commit()
+
+    return DeleteResponse(
+        message="Job and all associated data deleted successfully",
+        deleted_id=job_id,
+    )
+
 

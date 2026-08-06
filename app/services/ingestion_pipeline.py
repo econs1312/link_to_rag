@@ -44,7 +44,7 @@ class IngestionPipelineService:
             extractor = link_router.get_extractor(doc.source_url, source_type=doc.source_type)
             log.info("Selected extractor strategy", extractor=extractor.__class__.__name__)
 
-            extracted_content = await extractor.extract(doc.source_url)
+            extracted_content = await extractor.extract_with_retry(doc.source_url)
 
             # Update title and author if extracted
             doc.title = extracted_content.title

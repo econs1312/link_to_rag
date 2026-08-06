@@ -1,15 +1,19 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.logging import setup_logging, logger
 from app.core.exceptions import AppException
+from app.core.trace_middleware import TraceIDMiddleware
 from app.db.session import init_db
 from app.api.v1.ingest import router as ingest_router
 from app.api.v1.jobs import router as jobs_router
 from app.api.v1.search import router as search_router
 from app.api.v1.upload import router as upload_router
+from app.api.v1.analytics import router as analytics_router
 
 
 @asynccontextmanager
@@ -30,6 +34,9 @@ app = FastAPI(
     description="Microservice for extracting web/video/social content, structuring Markdown, chunking and pgvector search.",
     lifespan=lifespan,
 )
+
+# Trace ID Middleware (must be added before CORS so it runs on every request)
+app.add_middleware(TraceIDMiddleware)
 
 # CORS Middleware
 app.add_middleware(
@@ -61,9 +68,6 @@ async def app_exception_handler(request: Request, exc: AppException):
     )
 
 
-from app.api.v1.upload import router as upload_router
-from app.api.v1.analytics import router as analytics_router
-
 # Include Routers
 app.include_router(ingest_router, prefix="/api/v1", tags=["Ingestion"])
 app.include_router(jobs_router, prefix="/api/v1", tags=["Jobs"])
@@ -71,11 +75,6 @@ app.include_router(search_router, prefix="/api/v1", tags=["Search"])
 app.include_router(upload_router, prefix="/api/v1", tags=["Upload"])
 app.include_router(analytics_router, prefix="/api/v1", tags=["Analytics"])
 
-
-
-import os
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
 # Mount static directory
 static_dir = os.path.join(os.path.dirname(__file__), "static")
@@ -99,4 +98,3 @@ async def health_check():
         "app_name": settings.APP_NAME,
         "environment": settings.ENVIRONMENT,
     }
-

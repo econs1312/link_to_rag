@@ -43,12 +43,35 @@ class DomainCircuitBreaker:
         if stats.get("open_until", 0) > 0 and stats["open_until"] <= now:
             self._domain_stats[domain] = {"failure_count": 0, "open_until": 0}
 
+    def is_open(self, url: str) -> bool:
+        """Check if the circuit breaker is open for the given URL without raising."""
+        domain = self._extract_domain(url)
+        stats = self._domain_stats.get(domain)
+
+        if not stats:
+            return False
+
+        now = time.time()
+        if stats.get("open_until", 0) > now:
+            return True
+
+        # Cooldown expired, reset
+        if stats.get("open_until", 0) > 0 and stats["open_until"] <= now:
+            self._domain_stats[domain] = {"failure_count": 0, "open_until": 0}
+
+        return False
+
     def record_success(self, url: str) -> None:
         domain = self._extract_domain(url)
         if domain in self._domain_stats:
             self._domain_stats[domain] = {"failure_count": 0, "open_until": 0}
 
-    def record_failure(self, url: str, is_block_or_rate_limit: bool = True) -> None:
+    def record_failure(self, url: str, is_block_or_rate_limit: bool = True, status_code: int | None = None) -> None:
+        """Record a domain failure. Treats 403, 429, and 5xx as circuit breaker triggers."""
+        # Auto-classify 5xx as block/rate-limit failures
+        if status_code is not None and status_code >= 500:
+            is_block_or_rate_limit = True
+
         if not is_block_or_rate_limit:
             return
 
@@ -60,6 +83,7 @@ class DomainCircuitBreaker:
             "Recorded domain extraction failure",
             domain=domain,
             failure_count=stats["failure_count"],
+            status_code=status_code,
         )
 
         if stats["failure_count"] >= self.max_failures:
@@ -73,3 +97,4 @@ class DomainCircuitBreaker:
 
 
 circuit_breaker = DomainCircuitBreaker()
+

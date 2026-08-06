@@ -2,6 +2,7 @@ import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, status, BackgroundTasks, Request
 
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from arq.connections import create_pool, RedisSettings
 from urllib.parse import urlparse
@@ -41,7 +42,10 @@ async def enqueue_ingestion(
     db: AsyncSession = Depends(get_db),
     api_key: Optional[str] = Depends(verify_api_key),
 ):
-    correlation_id = str(uuid.uuid4())
+    # Use trace_id from the TraceIDMiddleware (bound in structlog contextvars)
+    ctx_vars = structlog.contextvars.get_contextvars()
+    correlation_id = ctx_vars.get("trace_id") or str(uuid.uuid4())
+
     url_str = str(payload.url)
     tenant_id = extract_tenant_id(request)
 
@@ -91,3 +95,4 @@ async def enqueue_ingestion(
         status=document.status.value,
         message="Ingestion job enqueued successfully",
     )
+

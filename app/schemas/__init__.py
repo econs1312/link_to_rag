@@ -6,6 +6,7 @@ from app.schemas.ingestion import (
     SearchRequest,
     SearchResultItem,
     SearchResponse,
+    DeleteResponse,
 )
 
 __all__ = [
@@ -16,4 +17,6 @@ __all__ = [
     "SearchRequest",
     "SearchResultItem",
     "SearchResponse",
+    "DeleteResponse",
 ]
+

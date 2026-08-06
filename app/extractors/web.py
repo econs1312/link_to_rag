@@ -50,6 +50,9 @@ class WebExtractor(BaseExtractor):
                         source_url=url,
                     )
 
+                # Track 5xx responses as circuit breaker failures
+                if response.status_code >= 500:
+                    self.record_failure(url, is_block_or_rate_limit=True, status_code=response.status_code)
                 logger.warning("Jina Reader API returned non-200. Trying Firecrawl or direct HTTP fallback.", status_code=response.status_code)
                 return await self._try_firecrawl_or_direct_fallback(url)
 
@@ -127,8 +130,14 @@ class WebExtractor(BaseExtractor):
                     self.record_failure(url, is_block_or_rate_limit=True)
                     raise ExtractionError(f"Access forbidden (HTTP {resp.status_code}) for target site {url}")
 
+                if resp.status_code >= 500:
+                    self.record_failure(url, is_block_or_rate_limit=True, status_code=resp.status_code)
+                    raise ExtractionError(
+                        f"HTTP {resp.status_code} server error fetching {url}: {resp.reason_phrase}"
+                    )
+
                 if resp.status_code >= 400:
-                    self.record_failure(url, is_block_or_rate_limit=resp.status_code in (429, 503))
+                    self.record_failure(url, is_block_or_rate_limit=resp.status_code in (429,), status_code=resp.status_code)
                     raise ExtractionError(
                         f"HTTP {resp.status_code} error fetching {url}: {resp.reason_phrase}"
                     )

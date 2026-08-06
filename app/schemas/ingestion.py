@@ -66,3 +66,9 @@ class SearchResponse(BaseModel):
     query: str
     total_results: int
     results: List[SearchResultItem]
+
+
+class DeleteResponse(BaseModel):
+    message: str
+    deleted_id: str
+

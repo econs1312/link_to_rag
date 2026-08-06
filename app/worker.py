@@ -1,4 +1,5 @@
 import asyncio
+import structlog
 from arq.connections import RedisSettings
 from arq.worker import Retry
 from urllib.parse import urlparse
@@ -22,6 +23,10 @@ def parse_redis_url(url: str) -> RedisSettings:
 async def process_ingestion_job(ctx: dict, job_id: str, correlation_id: str, webhook_url: str | None = None) -> str:
     """ARQ async worker task for document ingestion."""
     job_try = ctx.get("job_try", 1)
+
+    # Bind trace_id to structlog contextvars for consistent log correlation
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(trace_id=correlation_id)
 
     log = logger.bind(job_id=job_id, correlation_id=correlation_id, job_try=job_try)
     log.info("Worker picked up ingestion task", has_webhook=bool(webhook_url))
